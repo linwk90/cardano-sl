@@ -497,6 +497,7 @@ test-suite wallet-unit-tests
                     , formatting
                     , universum
                     , unordered-containers
+                    , utxo
                     , vector
                       -- needed only for input selection evaluation
                     , bytestring
