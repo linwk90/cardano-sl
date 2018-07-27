@@ -36,8 +36,6 @@ module Cardano.Wallet.Kernel.DB.HdWallet (
   , hdAccountCheckpoints
   , hdAddressId
   , hdAddressAddress
-  , hdAddressIsUsed
-  , hdAddressIsChange
     -- ** Composite lenses
   , hdAccountRootId
   , hdAddressRootId
@@ -263,18 +261,6 @@ data HdAddress = HdAddress {
 
       -- | The actual address
     , _hdAddressAddress  :: InDb Core.Address
-
-      -- | Has this address been involved in a transaction?
-      --
-      -- TODO: How is this determined? What is the definition? How is it set?
-      -- TODO: This will likely move to the 'BlockMeta' instead.
-    , _hdAddressIsUsed   :: Bool
-
-      -- | Was this address used as a change address?
-      --
-      -- TODO: How is this derived when we do wallet recovery?
-      -- TODO: Do we need this at all?
-    , _hdAddressIsChange :: Bool
     }
 
 {-------------------------------------------------------------------------------

@@ -165,8 +165,6 @@ initHdAddress :: HdAddressId
 initHdAddress addrId address = HdAddress {
       _hdAddressId       = addrId
     , _hdAddressAddress  = address
-    , _hdAddressIsUsed   = error "TODO: _hdAddressIsUsed"
-    , _hdAddressIsChange = error "TODO: _hdAddressIsChange"
     }
 
 {-------------------------------------------------------------------------------

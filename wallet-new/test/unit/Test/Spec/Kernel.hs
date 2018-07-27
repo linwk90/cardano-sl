@@ -16,6 +16,7 @@ import           Pos.Core.Chrono
 import           Test.Infrastructure.Generator
 import           Test.Infrastructure.Genesis
 import           Test.Pos.Configuration (withDefConfiguration)
+import           Test.Spec.BlockMetaScenarios
 import           Util.Buildable.Hspec
 import           Util.Buildable.QuickCheck
 import           UTxO.Bootstrap
@@ -41,6 +42,18 @@ spec =
         it "computes identical results in presence of dependent pending transactions" $
           bracketActiveWallet $ \activeWallet -> do
             checkEquivalent activeWallet (dependentPending genesis)
+
+        it "computes the expected block metadata for blockMetaScenarioA" $
+          bracketActiveWallet $ checkBlockMeta' (blockMetaScenarioA genesis)
+        it "computes the expected block metadata for blockMetaScenarioB" $
+          bracketActiveWallet $ checkBlockMeta' (blockMetaScenarioB genesis)
+        it "computes the expected block metadata for blockMetaScenarioC" $
+          bracketActiveWallet $ checkBlockMeta' (blockMetaScenarioC genesis)
+        it "computes the expected block metadata for blockMetaScenarioD" $
+          bracketActiveWallet $ checkBlockMeta' (blockMetaScenarioD genesis)
+        it "computes the expected block metadata for blockMetaScenarioE" $
+          bracketActiveWallet $ checkBlockMeta' (blockMetaScenarioE genesis)
+
       it "computes identical results using generated inductive wallets" $
         forAll (genInductiveUsingModel model) $ \ind -> do
           conjoin [
@@ -77,6 +90,15 @@ spec =
 
     mkWallet :: Hash h Addr => Ours Addr -> Transaction h Addr -> Wallet h Addr
     mkWallet = walletBoot Full.walletEmpty
+
+    checkBlockMeta' (ind, expected') activeWallet
+        = do
+            -- evaluate and validate the inductive
+            checkEquivalent activeWallet ind
+            -- snapshot of the passive wallet state
+            snapshot <- liftIO (Kernel.getWalletSnapshot (Kernel.walletPassive activeWallet))
+
+            checkBlockMeta snapshot expected'
 
 {-------------------------------------------------------------------------------
   Manually written inductives

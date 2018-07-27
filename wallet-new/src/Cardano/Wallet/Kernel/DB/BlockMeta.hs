@@ -3,6 +3,7 @@ module Cardano.Wallet.Kernel.DB.BlockMeta (
     -- * Block metadata
     BlockMeta(..)
   , AddressMeta(..)
+  , getAddrMeta
     -- ** Lenses
   , addressMetaIsChange
   , addressMetaIsUsed
@@ -37,7 +38,7 @@ data AddressMeta = AddressMeta {
       _addressMetaIsUsed   :: Bool
     , -- | Whether or not this is a 'change' Address
       _addressMetaIsChange :: Bool
-    }
+    } deriving (Eq)
 
 -- | Block metadata
 data BlockMeta = BlockMeta {
@@ -79,11 +80,23 @@ instance Monoid BlockMeta where
   mempty = BlockMeta {
            _blockMetaSlotId = InDb Map.empty
          ,
-          -- NOTE: if an address does not appear in blockMetaAddressMeta, we assume
-          -- that (AddressMeta isUsed isChange) = (AddressMeta False False)
           _blockMetaAddressMeta = InDb Map.empty
       }
   mappend = (<>)
+
+-- | Look up metadata for the specified address.
+--
+-- NOTE: if an address does not appear in blockMetaAddressMeta
+-- we assume that `isUsed == False` and `isChange == False`
+getAddrMeta :: BlockMeta -> Core.Address -> AddressMeta
+getAddrMeta blockMeta addr
+    = fromMaybe def (Map.lookup addr addrsMeta)
+    where
+        addrsMeta = blockMeta ^. blockMetaAddressMeta ^. fromDb
+        def = AddressMeta {
+                _addressMetaIsUsed   = False
+              , _addressMetaIsChange = False
+              }
 
 {-------------------------------------------------------------------------------
   Pretty-printing
