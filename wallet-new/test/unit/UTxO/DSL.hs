@@ -72,6 +72,7 @@ module UTxO.DSL (
   , utxoAddressForInput
     -- ** Chain
   , Block
+  , BlockMeta'(..)
   , Chain
   , chainToLedger
   , utxoApplyBlock
@@ -93,8 +94,12 @@ import           Prelude (Show (..))
 import           Serokell.Util (listJson, mapJson)
 import           Universum hiding (Foldable, foldr, sum, tail, toList)
 
+import           Cardano.Wallet.Kernel.DB.BlockMeta(AddressMeta)
 import           Cardano.Wallet.Kernel.Util (at, restrictKeys, withoutKeys)
+
 import           Util.Validated
+
+import           UTxO.Context(Addr)
 
 {-------------------------------------------------------------------------------
   Parameters
@@ -623,6 +628,24 @@ instance Hash GivenHash a where
 -- | The given hash is independent from any actual hash function
 givenHash :: Transaction h a -> GivenHash (Transaction h a)
 givenHash = GivenHash . trHash
+
+
+{-------------------------------------------------------------------------------
+  Additional: BlockMeta, includes AddressMeta
+-------------------------------------------------------------------------------}
+
+-- | Block metadata
+--
+-- Models the Cardano BlockMeta but ignores the SlotId for each TxId.
+-- The Cardano transaction confirmation metadata has type `Map Txp.TxId Core.SlotId`,
+-- whereas for BlockMeta' we just keep a list of DSL transaction Ids.
+data BlockMeta' h = BlockMeta' {
+      -- | Ids for all confirmed transactions
+      _blockMetaSlotId'      :: [h (Transaction h Addr)]
+
+    , -- | Address metadata using the DSL `Addr` and the Cardano `AddressMeta`
+      _blockMetaAddressMeta' :: Map Addr AddressMeta
+    }
 
 {-------------------------------------------------------------------------------
   Pretty-printing

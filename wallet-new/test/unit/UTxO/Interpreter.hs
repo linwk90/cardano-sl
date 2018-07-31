@@ -37,6 +37,7 @@ import qualified Formatting.Buildable
 import           Prelude (Show (..))
 import           Serokell.Util (listJson, mapJson)
 
+import           Cardano.Wallet.Kernel.DB.BlockMeta(AddressMeta, BlockMeta(..))
 import           Cardano.Wallet.Kernel.DB.InDb
 import           Cardano.Wallet.Kernel.DB.Resolved
 import           Cardano.Wallet.Kernel.Types
@@ -518,6 +519,38 @@ instance DSL.Hash h Addr => Interpret h (DSL.Utxo h Addr) where
           ((_key, inp'), _) <- int inp
           out'              <- int out
           return (inp', out')
+
+
+-- | Interpretation of block metadata
+--
+-- NOTE: since there is no SlotId in the DSL's BlockMeta', we use a summy SlotId when
+--       translating from BlockMeta' to BlockMeta
+instance DSL.Hash h Addr => Interpret h (DSL.BlockMeta' h) where
+  type Interpreted (DSL.BlockMeta' h) = BlockMeta
+
+  int :: forall e m. Monad m
+      => DSL.BlockMeta' h -> IntT h e m BlockMeta
+  int (DSL.BlockMeta' txs' addrMeta') = do
+      _blockMetaSlotId      <- intTxIds txs'
+      _blockMetaAddressMeta <- intAddrMetas addrMeta'
+      return $ BlockMeta {..}
+      where
+          intAddrMetas :: Map Addr AddressMeta -> IntT h e m (InDb (Map Address AddressMeta))
+          intAddrMetas addrMetas
+            = InDb . Map.fromList <$> mapM intAddrMeta (Map.toList addrMetas)
+          -- Interpret only the Addr to Address, there is no need to do anything with AddressMeta
+          intAddrMeta :: (Addr,AddressMeta) -> IntT h e m (Address,AddressMeta)
+          intAddrMeta (addr,addrMeta) = do
+              address <- addrInfoCardano <$> int addr
+              return (address,addrMeta)
+
+          intTxIds :: [h (DSL.Transaction h Addr)] -> IntT h e m (InDb (Map TxId SlotId))
+          intTxIds txIds = InDb . Map.fromList <$> mapM intTxId txIds
+          intTxId :: h (DSL.Transaction h Addr) -> IntT h e m (TxId, SlotId)
+          intTxId txId = do
+              txId' <- intHash txId
+              return (txId',dummySlotId)
+          dummySlotId = SlotId (EpochIndex 11) (UnsafeLocalSlotIndex 47)
 
 {-------------------------------------------------------------------------------
   Instances that change the state

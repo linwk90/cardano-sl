@@ -1,10 +1,11 @@
 module Test.Spec.BlockMetaScenarios (
-    blockMetaScenarioA
+    actualBlockMeta
+  , blockMetaScenarioA
   , blockMetaScenarioB
   , blockMetaScenarioC
   , blockMetaScenarioD
   , blockMetaScenarioE
-  , checkBlockMeta
+  , cmpBlockMeta
   ) where
 
 import           Universum
@@ -15,9 +16,9 @@ import qualified Data.Set as Set
 
 import qualified Cardano.Wallet.Kernel as Kernel
 import           Cardano.Wallet.Kernel.DB.AcidState (dbHdWallets)
-import           Cardano.Wallet.Kernel.DB.BlockMeta (AddressMeta (..), blockMetaAddressMeta, blockMetaSlotId, getAddrMeta)
-import           Cardano.Wallet.Kernel.DB.HdWallet (hdAccountCheckpoints, hdAddressAddress)
-import           Cardano.Wallet.Kernel.DB.HdWallet.Read (readAllHdAccounts, readAllHdAddresses)
+import           Cardano.Wallet.Kernel.DB.BlockMeta (AddressMeta (..), BlockMeta (..))
+import           Cardano.Wallet.Kernel.DB.HdWallet (hdAccountCheckpoints)
+import           Cardano.Wallet.Kernel.DB.HdWallet.Read (readAllHdAccounts)
 import           Cardano.Wallet.Kernel.DB.InDb (fromDb)
 import           Cardano.Wallet.Kernel.DB.Spec (currentBlockMeta)
 import qualified Cardano.Wallet.Kernel.DB.Util.IxSet as IxSet
@@ -25,7 +26,6 @@ import qualified Cardano.Wallet.Kernel.DB.Util.IxSet as IxSet
 import           Pos.Core.Chrono
 
 import           Test.Infrastructure.Genesis
-import           Util.Buildable.Hspec
 import           UTxO.Context
 import           UTxO.DSL
 import           Wallet.Inductive
@@ -35,31 +35,23 @@ import           Wallet.Inductive
   of NewPending, ApplyBlock and Rollback
 -------------------------------------------------------------------------------}
 
-checkBlockMeta :: Kernel.DB -> (Int,Int,AddressMeta) -> IO ()
-checkBlockMeta snapshot' (expectedAddrs, expectedSlots, expectedAddrMeta) = do
-    let (actualAddrs, actualSlots, actualAddrMeta) = actualBlockMeta snapshot'
-    shouldBe expectedAddrs    actualAddrs
-    shouldBe expectedSlots    actualSlots
-    shouldBe expectedAddrMeta actualAddrMeta
+-- | Two BlockMeta are considered equal if they have the same TxIds in transaction slot metadata
+--   and if they have the same address metadata (SlotIds are ignored for this comparison
+--   , see the intpreter instance for `DSL.BlockMeta' h` for more on this)
+cmpBlockMeta :: BlockMeta -> BlockMeta -> Bool
+cmpBlockMeta (BlockMeta slotIds addrMeta) (BlockMeta slotIds' addrMeta') =
+    ((Map.keys $ slotIds  ^. fromDb) == (Map.keys $ slotIds' ^. fromDb))
+        && ((addrMeta ^. fromDb) == (addrMeta' ^. fromDb))
 
--- For the test inductives, we expect a @single@ Account and Address for the resulting wallet
--- This allows us to assume correspondence between the Cardano Address with
--- the DSL address `P0` used in the test inductive wallets
-actualBlockMeta :: Kernel.DB -> (Int, Int, AddressMeta)
-actualBlockMeta snapshot' = (actualAddrs, actualSlots, actualAddrMeta)
+-- | Extract the current checkpoint BlockMeta from the singleton account in the snapshot.
+--
+--   NOTE: We assume that our test data will only produce one account in the DB.
+actualBlockMeta :: Kernel.DB -> BlockMeta
+actualBlockMeta snapshot'
+    = theAccount ^. hdAccountCheckpoints . currentBlockMeta
     where
         getOne' ix = fromMaybe (error "Expected a singleton") (IxSet.getOne ix)
-
         theAccount = getOne' (readAllHdAccounts $ snapshot' ^. dbHdWallets)
-        blockMeta = theAccount ^. hdAccountCheckpoints . currentBlockMeta
-
-        theHdAddr = getOne' (readAllHdAddresses $ snapshot' ^. dbHdWallets)
-        theAddr = theHdAddr ^. hdAddressAddress . fromDb
-
-        -- expected number of confirmed transactions
-        actualSlots    = Map.size $ blockMeta ^. blockMetaSlotId ^. fromDb
-        actualAddrs    = Map.size $ blockMeta ^. blockMetaAddressMeta ^. fromDb
-        actualAddrMeta = getAddrMeta blockMeta theAddr
 
 -- | A Payment from P0 to P1 with change returned to P0
 paymentWithChangeFromP0ToP1 :: forall h. Hash h Addr
@@ -118,9 +110,9 @@ paymentWithChangeFromP1ToP0 GenesisValues{..} = Transaction {
 -- A single pending payment from P0 to P1, with 'change' returned to P0
 blockMetaScenarioA :: forall h. Hash h Addr
                    => GenesisValues h Addr
-                   -> (Inductive h Addr, (Int, Int, AddressMeta))
+                   -> (Inductive h Addr, BlockMeta' h)
 blockMetaScenarioA genVals@GenesisValues{..}
-    = (ind, (expectedAddrs, expectedSlots, expectedAddrMeta))
+    = (ind, BlockMeta'{..})
   where
     t0 = paymentWithChangeFromP0ToP1 genVals
     ind = Inductive {
@@ -132,11 +124,10 @@ blockMetaScenarioA genVals@GenesisValues{..}
         }
 
     --  EXPECTED BlockMeta:
-    --    * since the transaction is not confirmed, we expect no address or transaction slot metadata
-    expectedAddrs = 0
-    expectedSlots = 0
-    --    * since there is no addresss metadata for the pending 'change' address, we expect the default AddrMeta
-    expectedAddrMeta = AddressMeta {_addressMetaIsUsed = False, _addressMetaIsChange = False}
+    --    * since the transaction is not confirmed, we expect confirmed transactions
+    _blockMetaSlotId' = []
+    --    * we expect no addresss metadata for the pending 'change' address
+    _blockMetaAddressMeta' = Map.empty
 
 -- | Scenario B
 -- A single pending payment from P0 to P1, with 'change' returned to P0
@@ -146,9 +137,9 @@ blockMetaScenarioA genVals@GenesisValues{..}
 --   are "ours" but not all outputs are "ours"
 blockMetaScenarioB :: forall h. Hash h Addr
                    => GenesisValues h Addr
-                   -> (Inductive h Addr, (Int, Int, AddressMeta))
+                   -> (Inductive h Addr, BlockMeta' h)
 blockMetaScenarioB genVals@GenesisValues{..}
-    = (ind, (expectedAddrs, expectedSlots, expectedAddrMeta))
+    = (ind, BlockMeta'{..})
   where
     t0 = paymentWithChangeFromP0ToP1 genVals
     ind = Inductive {
@@ -161,11 +152,11 @@ blockMetaScenarioB genVals@GenesisValues{..}
         }
 
     --  EXPECTED BlockMeta:
-    --    * since the transaction is now confirmed, we expect to see the singleton address and transaction metadata
-    expectedAddrs = 1
-    expectedSlots = 1
+    --    * since the transaction is now confirmed, we expect to see the single transaction
+    _blockMetaSlotId' = [(hash t0)]
     --    * we expect the address to be recognised as a 'change' address in the metadata
-    expectedAddrMeta = AddressMeta {_addressMetaIsUsed = True, _addressMetaIsChange = True}
+    _blockMetaAddressMeta'
+        = Map.singleton p0 (AddressMeta {_addressMetaIsUsed = True, _addressMetaIsChange = True})
 
 -- | Scenario C
 -- Two confirmed payments from P0 to P1, both using the same `change` address for P0
@@ -174,9 +165,9 @@ blockMetaScenarioB genVals@GenesisValues{..}
 --   the address must occur in exactly one confirmed transaction
 blockMetaScenarioC :: forall h. Hash h Addr
                    => GenesisValues h Addr
-                   -> (Inductive h Addr, (Int, Int, AddressMeta))
+                   -> (Inductive h Addr, BlockMeta' h)
 blockMetaScenarioC genVals@GenesisValues{..}
-    = (ind, (expectedAddrs, expectedSlots, expectedAddrMeta))
+    = (ind, BlockMeta'{..})
   where
     (t0,t1) = repeatPaymentWithChangeFromP0ToP1 genVals
     ind = Inductive {
@@ -190,12 +181,12 @@ blockMetaScenarioC genVals@GenesisValues{..}
         }
 
     --  EXPECTED BlockMeta:
-    --    * we expect to see the singleton address and 2 confirmed transactions
-    expectedAddrs = 1
-    expectedSlots = 2
+    --    * we expect to see the 2 confirmed transactions
+    _blockMetaSlotId' = [(hash t0),(hash t1)]
     --    * we expect the address to no longer be recognised as a 'change' address in the metadata
     --      (because a `change` address must occur in exactly one confirmed transaction)
-    expectedAddrMeta = AddressMeta {_addressMetaIsUsed = True, _addressMetaIsChange = False}
+    _blockMetaAddressMeta'
+        = Map.singleton p0 (AddressMeta {_addressMetaIsUsed = True, _addressMetaIsChange = False})
 
 -- | Scenario D
 -- ScenarioC + Rollback
@@ -203,9 +194,9 @@ blockMetaScenarioC genVals@GenesisValues{..}
 -- This scenario exercises Rollback behaviour for block metadata
 blockMetaScenarioD :: forall h. Hash h Addr
                    => GenesisValues h Addr
-                   -> (Inductive h Addr, (Int, Int, AddressMeta))
+                   -> (Inductive h Addr, BlockMeta' h)
 blockMetaScenarioD genVals@GenesisValues{..}
-    = (ind, (expectedAddrs, expectedSlots, expectedAddrMeta))
+    = (ind, BlockMeta'{..})
   where
     (t0,t1) = repeatPaymentWithChangeFromP0ToP1 genVals
     ind = Inductive {
@@ -220,13 +211,12 @@ blockMetaScenarioD genVals@GenesisValues{..}
         }
 
     --  EXPECTED BlockMeta:
-    --    * we expect to see the singleton address and now only 1 confirmed transaction
-    expectedAddrs = 1
-    expectedSlots = 1
+    --    * we expect to see only 1 confirmed transaction after the rollback
+    _blockMetaSlotId' = [(hash t0)]
     --    * we expect the address to again be recognised as a 'change' address in the metadata
     --      (the rollback leads to the `change` address occuring in exactly one confirmed transaction again, as in ScenarioC)
-    expectedAddrMeta = AddressMeta {_addressMetaIsUsed = True, _addressMetaIsChange = True}
-
+    _blockMetaAddressMeta'
+        = Map.singleton p0 (AddressMeta {_addressMetaIsUsed = True, _addressMetaIsChange = True})
 
 -- | Scenario E
 -- A payment from P1 to P0's single address.
@@ -235,9 +225,9 @@ blockMetaScenarioD genVals@GenesisValues{..}
 --   the address must occur in a single confirmed transaction for which all inputs are "ours"
 blockMetaScenarioE :: forall h. Hash h Addr
                    => GenesisValues h Addr
-                   -> (Inductive h Addr, (Int, Int, AddressMeta))
+                   -> (Inductive h Addr, BlockMeta' h)
 blockMetaScenarioE genVals@GenesisValues{..}
-    = (ind, (expectedAddrs, expectedSlots, expectedAddrMeta))
+    = (ind, BlockMeta'{..})
   where
     t0 = paymentWithChangeFromP1ToP0 genVals
     ind = Inductive {
@@ -249,8 +239,8 @@ blockMetaScenarioE genVals@GenesisValues{..}
         }
 
     --  EXPECTED BlockMeta:
-    --    * we expect to see the singleton address and confirmed transaction
-    expectedAddrs = 1
-    expectedSlots = 1
+    --    * we expect to see the single confirmed transaction
+    _blockMetaSlotId' = [(hash t0)]
     -- For `t0` the inputs are not all "ours" and hence `isChange` is False
-    expectedAddrMeta = AddressMeta {_addressMetaIsUsed = True, _addressMetaIsChange = False}
+    _blockMetaAddressMeta'
+        = Map.singleton p0 (AddressMeta {_addressMetaIsUsed = True, _addressMetaIsChange = False})

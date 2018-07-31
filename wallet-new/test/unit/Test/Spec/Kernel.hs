@@ -6,6 +6,8 @@ import           Universum
 
 import qualified Data.Set as Set
 
+import           Formatting (sformat, build, (%))
+
 import qualified Cardano.Wallet.Kernel as Kernel
 import qualified Cardano.Wallet.Kernel.Diffusion as Kernel
 import qualified Cardano.Wallet.Kernel.Keystore as Keystore
@@ -19,10 +21,12 @@ import           Test.Pos.Configuration (withDefConfiguration)
 import           Test.Spec.BlockMetaScenarios
 import           Util.Buildable.Hspec
 import           Util.Buildable.QuickCheck
+import           Util.Validated
 import           UTxO.Bootstrap
 import           UTxO.Context
 import           UTxO.Crypto
 import           UTxO.DSL
+import           UTxO.Interpreter(IntCtxt)
 import           UTxO.Translate
 import           Wallet.Abstract
 import           Wallet.Inductive
@@ -80,25 +84,57 @@ spec =
                     => Kernel.ActiveWallet
                     -> Inductive h Addr
                     -> Expectation
-    checkEquivalent activeWallet ind = do
-       shouldReturnValidated $ runTranslateTNoErrors $ do
+    checkEquivalent w ind = shouldReturnValidated $ evaluate w ind
+
+    -- | Evaluate the inductive step by step and compare the DSL and Cardano results
+    --   at the end of each step.
+    -- NOTE: This evaluation leaves side effects: it changes the state of the active wallet
+    --       and also updates the inductive context, which we return to enable
+    --       further custom interpretation.
+    evaluate :: forall h. Hash h Addr
+             => Kernel.ActiveWallet
+             -> Inductive h Addr
+             -> IO (Validated EquivalenceViolation (IntCtxt h))
+    evaluate activeWallet ind = do
+       fmap (fmap snd) $ runTranslateTNoErrors $ do
          equivalentT activeWallet (encKpEnc ekp) (mkWallet (== addr)) ind
       where
         [addr]       = Set.toList $ inductiveOurs ind
         AddrInfo{..} = resolveAddr addr transCtxt
         Just ekp     = addrInfoMasterKey
 
+    evaluate' :: forall h. Hash h Addr
+             => Kernel.ActiveWallet
+             -> Inductive h Addr
+             -> IO (IntCtxt h)
+    evaluate' activeWallet ind = do
+        res <- evaluate activeWallet ind
+        case res of
+            Invalid _ e   ->
+               error $ sformat ("Inductive wallet evaulation failed: "%build) e
+            Valid intCtxt' ->
+               return intCtxt'
+
     mkWallet :: Hash h Addr => Ours Addr -> Transaction h Addr -> Wallet h Addr
     mkWallet = walletBoot Full.walletEmpty
 
-    checkBlockMeta' (ind, expected') activeWallet
+    checkBlockMeta' :: Hash h Addr
+                    => (Inductive h Addr, BlockMeta' h)
+                    -> Kernel.ActiveWallet
+                    -> IO ()
+    checkBlockMeta' (ind, blockMeta') activeWallet
         = do
-            -- evaluate and validate the inductive
-            checkEquivalent activeWallet ind
-            -- snapshot of the passive wallet state
-            snapshot <- liftIO (Kernel.getWalletSnapshot (Kernel.walletPassive activeWallet))
+            -- evaluates and verifies the inductive, leaving changes in wallet state and the interpretation context
+            intCtxt <- evaluate' activeWallet ind
 
-            checkBlockMeta snapshot expected'
+            -- translate DSL BlockMeta' to Cardano BlockMeta
+            expected' <- runTranslateT $ toCardanoNoErr intCtxt blockMeta'
+
+            -- grab a snapshot of the wallet state to get the BlockMeta produced by evaluating the inductive
+            snapshot <- liftIO (Kernel.getWalletSnapshot (Kernel.walletPassive activeWallet))
+            let actual' = actualBlockMeta snapshot
+
+            shouldBe True $ cmpBlockMeta actual' expected'
 
 {-------------------------------------------------------------------------------
   Manually written inductives
