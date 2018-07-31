@@ -65,8 +65,8 @@ packages:
   extra-dep: true
 
 - location:
-    git: https://github.com/input-output-hk/cardano-crypto
-    commit: 33c7ecc6e4bd71c3ea0195e9d796eeace7be22cf
+    git: https://github.com/anviking/cardano-crypto # FIXME: Don't use fork
+    commit: 7d85e679191656ded76e6457a82d1bc2c20beeec
   extra-dep: true
 
 ## Vendored/Forked dependencies
