@@ -9,9 +9,13 @@ import qualified Data.Set as Set
 import           Formatting (sformat, build, (%))
 
 import qualified Cardano.Wallet.Kernel as Kernel
+import           Cardano.Wallet.Kernel.DB.BlockMeta (BlockMeta)
 import qualified Cardano.Wallet.Kernel.Diffusion as Kernel
 import qualified Cardano.Wallet.Kernel.Keystore as Keystore
 import           Cardano.Wallet.Kernel.MonadDBReadAdaptor (rocksDBNotAvailable)
+
+import           Control.Exception (throw)
+
 import           Pos.Core (Coeff (..), TxSizeLinear (..))
 import           Pos.Core.Chrono
 
@@ -26,7 +30,7 @@ import           UTxO.Bootstrap
 import           UTxO.Context
 import           UTxO.Crypto
 import           UTxO.DSL
-import           UTxO.Interpreter(IntCtxt)
+import           UTxO.Interpreter(BlockMeta' (..), IntCtxt, IntException, Interpret, int, runIntT')
 import           UTxO.Translate
 import           Wallet.Abstract
 import           Wallet.Inductive
@@ -111,12 +115,23 @@ spec =
         res <- evaluate activeWallet ind
         case res of
             Invalid _ e   ->
-               error $ sformat ("Inductive wallet evaulation failed: "%build) e
+               error $ sformat ("Inductive wallet evaluation failed: "%build) e
             Valid intCtxt' ->
                return intCtxt'
 
     mkWallet :: Hash h Addr => Ours Addr -> Transaction h Addr -> Wallet h Addr
     mkWallet = walletBoot Full.walletEmpty
+
+    -- | Translates the DSL BlockMeta' value to BlockMeta
+    intBlockMeta :: forall h. (Hash h Addr, Interpret h (BlockMeta' h))
+                 => IntCtxt h
+                 -> (BlockMeta' h)
+                 -> TranslateT IntException IO BlockMeta
+    intBlockMeta intCtxt a = do
+        ma' <- catchTranslateErrors $ runIntT' intCtxt $ int a
+        case ma' of
+          Left err -> throw err
+          Right (a', _ic') -> return a'
 
     checkBlockMeta' :: Hash h Addr
                     => (Inductive h Addr, BlockMeta' h)
@@ -128,13 +143,13 @@ spec =
             intCtxt <- evaluate' activeWallet ind
 
             -- translate DSL BlockMeta' to Cardano BlockMeta
-            expected' <- runTranslateT $ toCardanoNoErr intCtxt blockMeta'
+            expected' <- runTranslateT $ intBlockMeta intCtxt blockMeta'
 
             -- grab a snapshot of the wallet state to get the BlockMeta produced by evaluating the inductive
             snapshot <- liftIO (Kernel.getWalletSnapshot (Kernel.walletPassive activeWallet))
             let actual' = actualBlockMeta snapshot
 
-            shouldBe True $ cmpBlockMeta actual' expected'
+            shouldBe actual' expected'
 
 {-------------------------------------------------------------------------------
   Manually written inductives

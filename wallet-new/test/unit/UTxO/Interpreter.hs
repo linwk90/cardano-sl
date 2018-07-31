@@ -20,6 +20,8 @@ module UTxO.Interpreter (
     -- * Interpreter proper
   , Interpret(..)
   , IntRollback(..)
+    -- * DSL BlockMeta'
+  , BlockMeta'(..)
   ) where
 
 import           Universum hiding (id)
@@ -520,17 +522,27 @@ instance DSL.Hash h Addr => Interpret h (DSL.Utxo h Addr) where
           out'              <- int out
           return (inp', out')
 
+-- | Block metadata
+--
+-- Models the Cardano BlockMeta, replacing the map keys TxId with the DSL TxId and
+-- Address with the DSL Addr.
+data BlockMeta' h = BlockMeta' {
+      -- | SlotIds for all confirmed transactions
+      _blockMetaSlotId'      :: Map (h (DSL.Transaction h Addr)) SlotId
+
+    , -- | Address metadata using the DSL `Addr` and the Cardano `AddressMeta`
+      _blockMetaAddressMeta' :: Map Addr AddressMeta
+    }
 
 -- | Interpretation of block metadata
 --
--- NOTE: since there is no SlotId in the DSL's BlockMeta', we use a summy SlotId when
---       translating from BlockMeta' to BlockMeta
-instance DSL.Hash h Addr => Interpret h (DSL.BlockMeta' h) where
-  type Interpreted (DSL.BlockMeta' h) = BlockMeta
+-- NOTE: since BlockMeta' has a mix of DSL and Cardano values, only the DSL values are translated
+instance DSL.Hash h Addr => Interpret h (BlockMeta' h) where
+  type Interpreted (BlockMeta' h) = BlockMeta
 
   int :: forall e m. Monad m
-      => DSL.BlockMeta' h -> IntT h e m BlockMeta
-  int (DSL.BlockMeta' txs' addrMeta') = do
+      => BlockMeta' h -> IntT h e m BlockMeta
+  int (BlockMeta' txs' addrMeta') = do
       _blockMetaSlotId      <- intTxIds txs'
       _blockMetaAddressMeta <- intAddrMetas addrMeta'
       return $ BlockMeta {..}
@@ -538,19 +550,21 @@ instance DSL.Hash h Addr => Interpret h (DSL.BlockMeta' h) where
           intAddrMetas :: Map Addr AddressMeta -> IntT h e m (InDb (Map Address AddressMeta))
           intAddrMetas addrMetas
             = InDb . Map.fromList <$> mapM intAddrMeta (Map.toList addrMetas)
+
           -- Interpret only the Addr to Address, there is no need to do anything with AddressMeta
           intAddrMeta :: (Addr,AddressMeta) -> IntT h e m (Address,AddressMeta)
           intAddrMeta (addr,addrMeta) = do
               address <- addrInfoCardano <$> int addr
               return (address,addrMeta)
 
-          intTxIds :: [h (DSL.Transaction h Addr)] -> IntT h e m (InDb (Map TxId SlotId))
-          intTxIds txIds = InDb . Map.fromList <$> mapM intTxId txIds
-          intTxId :: h (DSL.Transaction h Addr) -> IntT h e m (TxId, SlotId)
-          intTxId txId = do
+          intTxIds :: Map (h (DSL.Transaction h Addr)) SlotId -> IntT h e m (InDb (Map TxId SlotId))
+          intTxIds txIds = InDb . Map.fromList <$> mapM intTxId (Map.toList txIds)
+
+          -- Interpret only the DSL to Cardano TxId, there is no need to do anything with SlotId
+          intTxId :: (h (DSL.Transaction h Addr),SlotId) -> IntT h e m (TxId, SlotId)
+          intTxId (txId,slotId) = do
               txId' <- intHash txId
-              return (txId',dummySlotId)
-          dummySlotId = SlotId (EpochIndex 11) (UnsafeLocalSlotIndex 47)
+              return (txId',slotId)
 
 {-------------------------------------------------------------------------------
   Instances that change the state

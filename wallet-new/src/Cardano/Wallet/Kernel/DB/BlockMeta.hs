@@ -38,7 +38,7 @@ data AddressMeta = AddressMeta {
       _addressMetaIsUsed   :: Bool
     , -- | Whether or not this is a 'change' Address
       _addressMetaIsChange :: Bool
-    } deriving (Eq)
+    } deriving Eq
 
 -- | Block metadata
 data BlockMeta = BlockMeta {
@@ -46,7 +46,7 @@ data BlockMeta = BlockMeta {
       _blockMetaSlotId      :: InDb (Map Txp.TxId Core.SlotId)
     , -- | Address metadata
       _blockMetaAddressMeta :: InDb (Map Core.Address AddressMeta)
-    }
+    } deriving Eq
 
 makeLenses ''AddressMeta
 makeLenses ''BlockMeta

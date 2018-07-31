@@ -5,7 +5,6 @@ module Test.Spec.BlockMetaScenarios (
   , blockMetaScenarioC
   , blockMetaScenarioD
   , blockMetaScenarioE
-  , cmpBlockMeta
   ) where
 
 import           Universum
@@ -19,29 +18,22 @@ import           Cardano.Wallet.Kernel.DB.AcidState (dbHdWallets)
 import           Cardano.Wallet.Kernel.DB.BlockMeta (AddressMeta (..), BlockMeta (..))
 import           Cardano.Wallet.Kernel.DB.HdWallet (hdAccountCheckpoints)
 import           Cardano.Wallet.Kernel.DB.HdWallet.Read (readAllHdAccounts)
-import           Cardano.Wallet.Kernel.DB.InDb (fromDb)
 import           Cardano.Wallet.Kernel.DB.Spec (currentBlockMeta)
 import qualified Cardano.Wallet.Kernel.DB.Util.IxSet as IxSet
 
+import           Pos.Core(EpochIndex (..), SlotId (..), LocalSlotIndex(..))
 import           Pos.Core.Chrono
 
 import           Test.Infrastructure.Genesis
 import           UTxO.Context
 import           UTxO.DSL
+import           UTxO.Interpreter(BlockMeta' (..))
 import           Wallet.Inductive
 
 {-------------------------------------------------------------------------------
   Manually written inductives to exercise block metadata in the presence
   of NewPending, ApplyBlock and Rollback
 -------------------------------------------------------------------------------}
-
--- | Two BlockMeta are considered equal if they have the same TxIds in transaction slot metadata
---   and if they have the same address metadata (SlotIds are ignored for this comparison
---   , see the intpreter instance for `DSL.BlockMeta' h` for more on this)
-cmpBlockMeta :: BlockMeta -> BlockMeta -> Bool
-cmpBlockMeta (BlockMeta slotIds addrMeta) (BlockMeta slotIds' addrMeta') =
-    ((Map.keys $ slotIds  ^. fromDb) == (Map.keys $ slotIds' ^. fromDb))
-        && ((addrMeta ^. fromDb) == (addrMeta' ^. fromDb))
 
 -- | Extract the current checkpoint BlockMeta from the singleton account in the snapshot.
 --
@@ -106,6 +98,10 @@ paymentWithChangeFromP1ToP0 GenesisValues{..} = Transaction {
   where
     fee = overestimate txFee 1 2
 
+slot0, slot1 :: SlotId
+slot0 = SlotId (EpochIndex 0) (UnsafeLocalSlotIndex 1)
+slot1 = SlotId (EpochIndex 0) (UnsafeLocalSlotIndex 2)
+
 -- | Scenario A
 -- A single pending payment from P0 to P1, with 'change' returned to P0
 blockMetaScenarioA :: forall h. Hash h Addr
@@ -124,8 +120,8 @@ blockMetaScenarioA genVals@GenesisValues{..}
         }
 
     --  EXPECTED BlockMeta:
-    --    * since the transaction is not confirmed, we expect confirmed transactions
-    _blockMetaSlotId' = []
+    --    * since the transaction is not confirmed, we expect no confirmed transactions
+    _blockMetaSlotId' = Map.empty
     --    * we expect no addresss metadata for the pending 'change' address
     _blockMetaAddressMeta' = Map.empty
 
@@ -153,7 +149,7 @@ blockMetaScenarioB genVals@GenesisValues{..}
 
     --  EXPECTED BlockMeta:
     --    * since the transaction is now confirmed, we expect to see the single transaction
-    _blockMetaSlotId' = [(hash t0)]
+    _blockMetaSlotId' = Map.singleton (hash t0) slot0
     --    * we expect the address to be recognised as a 'change' address in the metadata
     _blockMetaAddressMeta'
         = Map.singleton p0 (AddressMeta {_addressMetaIsUsed = True, _addressMetaIsChange = True})
@@ -182,7 +178,7 @@ blockMetaScenarioC genVals@GenesisValues{..}
 
     --  EXPECTED BlockMeta:
     --    * we expect to see the 2 confirmed transactions
-    _blockMetaSlotId' = [(hash t0),(hash t1)]
+    _blockMetaSlotId' = Map.fromList [(hash t0, slot0),(hash t1, slot1)]
     --    * we expect the address to no longer be recognised as a 'change' address in the metadata
     --      (because a `change` address must occur in exactly one confirmed transaction)
     _blockMetaAddressMeta'
@@ -212,7 +208,7 @@ blockMetaScenarioD genVals@GenesisValues{..}
 
     --  EXPECTED BlockMeta:
     --    * we expect to see only 1 confirmed transaction after the rollback
-    _blockMetaSlotId' = [(hash t0)]
+    _blockMetaSlotId' = Map.singleton (hash t0) slot0
     --    * we expect the address to again be recognised as a 'change' address in the metadata
     --      (the rollback leads to the `change` address occuring in exactly one confirmed transaction again, as in ScenarioC)
     _blockMetaAddressMeta'
@@ -240,7 +236,7 @@ blockMetaScenarioE genVals@GenesisValues{..}
 
     --  EXPECTED BlockMeta:
     --    * we expect to see the single confirmed transaction
-    _blockMetaSlotId' = [(hash t0)]
+    _blockMetaSlotId' = Map.singleton (hash t0) slot0
     -- For `t0` the inputs are not all "ours" and hence `isChange` is False
     _blockMetaAddressMeta'
         = Map.singleton p0 (AddressMeta {_addressMetaIsUsed = True, _addressMetaIsChange = False})

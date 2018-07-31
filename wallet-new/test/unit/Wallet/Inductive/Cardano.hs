@@ -6,7 +6,6 @@ module Wallet.Inductive.Cardano (
     -- * Cardano interpreter for the inductive wallet
     EventCallbacks(..)
   , interpretT
-  , toCardanoNoErr
     -- * Equivalence check
   , EquivalenceViolation(..)
   , EquivalenceViolationEvidence(..)
@@ -168,17 +167,6 @@ interpretT injIntEx mkWallet EventCallbacks{..} Inductive{..} =
 {-------------------------------------------------------------------------------
   Equivalence check between the real implementation and (a) pure wallet
 -------------------------------------------------------------------------------}
-
--- | Interprets the DSL value and throws any validation errors
-toCardanoNoErr :: forall h a m. (Hash h Addr, MonadIO m, Interpret h a)
-          => IntCtxt h
-          -> a
-          -> TranslateT Void m (Interpreted a)
-toCardanoNoErr intCtxt a = do
-    ma' <- catchTranslateErrors $ runIntT' intCtxt $ int a
-    case ma' of
-      Left _err -> error "toCardano translation error"
-      Right (a', _ic') -> return a'
 
 equivalentT :: forall h e m. (Hash h Addr, MonadIO m)
             => Kernel.ActiveWallet
