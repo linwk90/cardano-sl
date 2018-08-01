@@ -32,9 +32,11 @@ module Pos.Util.Mnemonic
 import           Universum
 
 import           Basement.Sized.List (unListN)
+import           Control.Arrow (left)
 import           Control.Lens ((?~))
 import           Crypto.Encoding.BIP39
-import           Crypto.Encoding.BIP39.Dictionary (mnemonicSentenceToListN)
+import           Crypto.Encoding.BIP39.Dictionary (WordNotFound (..),
+                     mnemonicSentenceToListN)
 import           Crypto.Hash (Blake2b_256, Digest, hash)
 import           Data.Aeson (FromJSON (..), ToJSON (..))
 import           Data.Aeson.Types (Parser)
@@ -83,6 +85,7 @@ data MnemonicErr
     = MnemonicErrInvalidEntropyLength Int
     | MnemonicErrFailedToCreate
     | MnemonicErrForbiddenMnemonic
+    | MnemonicErrInvalidWord Text
     deriving (Show)
 
 
@@ -129,10 +132,14 @@ mkMnemonic
     => [Text]
     -> Either MnemonicErr (Mnemonic mw)
 mkMnemonic wordsm = do
-    sentence <- maybe
+
+    phrase <- fromMaybe
         (Left MnemonicErrFailedToCreate)
-        (Right . mnemonicPhraseToMnemonicSentence Dictionary.english)
-        (mnemonicPhrase @mw (toUtf8String <$> wordsm))
+        (Right <$> mnemonicPhrase @mw (toUtf8String <$> wordsm))
+
+    sentence <- left
+        (\(WordNotFound w) -> MnemonicErrInvalidWord (fromUtf8String w))
+        ((mnemonicPhraseToMnemonicSentence Dictionary.english) phrase)
 
     entropy <- maybe
         (Left MnemonicErrFailedToCreate)
@@ -296,6 +303,10 @@ instance Buildable (SecureLog (Mnemonic mw)) where
 
 instance Buildable MnemonicErr where
     build = \case
+        MnemonicErrInvalidWord w ->
+            bprint ("Invalid word: "%(show w)%", not found in dictionary")
+            -- TODO: Use unpack or something, not show
+            -- TODO: Merge MnemonicErrInvalidWord and MemonicErrFailedToCreate
         MnemonicErrInvalidEntropyLength l ->
             bprint ("Entropy must be a sequence of " % build % " bytes") l
         MnemonicErrFailedToCreate ->
@@ -325,10 +336,14 @@ instance Default (Mnemonic 12) where
                 , "flee"
                 ]
 
-            sentence = maybe
+            phrase = fromMaybe
                 (error $ show $ UnexpectedMnemonicErr MnemonicErrFailedToCreate)
-                (mnemonicPhraseToMnemonicSentence Dictionary.english)
                 (mnemonicPhrase @12 (toUtf8String <$> wordsm))
+
+            sentence = either
+                (\(WordNotFound w) -> error $ show $ MnemonicErrInvalidWord (fromUtf8String w))
+                id
+                ((mnemonicPhraseToMnemonicSentence Dictionary.english) phrase)
 
             entropy = fromMaybe
                 (error $ show $ UnexpectedMnemonicErr MnemonicErrFailedToCreate)
