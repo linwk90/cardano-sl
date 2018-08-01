@@ -2,6 +2,7 @@
 {-# LANGUAGE ImplicitParams             #-}
 {-# LANGUAGE InstanceSigs               #-}
 {-# LANGUAGE TemplateHaskell            #-}
+{-# LANGUAGE TupleSections              #-}
 {-# LANGUAGE UndecidableInstances       #-}
 
 -- | Interpreter from the DSL to Cardano types
@@ -522,10 +523,18 @@ instance DSL.Hash h Addr => Interpret h (DSL.Utxo h Addr) where
           out'              <- int out
           return (inp', out')
 
+{-------------------------------------------------------------------------------
+  (included in "Instances that read, but not update, the state")
+
+  Block metadata: defines a DSL `BlockMeta'` analogy to the Cardano `BlockMeta`
+  along with an interpreter instance to translate `BlockMeta'` to `BlockMeta`
+-------------------------------------------------------------------------------}
+
 -- | Block metadata
 --
--- Models the Cardano BlockMeta, replacing the map keys TxId with the DSL TxId and
--- Address with the DSL Addr.
+-- Models the Cardano BlockMeta, replacing the map key types:
+-- * replace Cardano\TxId with DSL\TxId
+-- * replace Cardano\Address with DSL\Addr
 data BlockMeta' h = BlockMeta' {
       -- | SlotIds for all confirmed transactions
       _blockMetaSlotId'      :: Map (h (DSL.Transaction h Addr)) SlotId
@@ -536,7 +545,7 @@ data BlockMeta' h = BlockMeta' {
 
 -- | Interpretation of block metadata
 --
--- NOTE: since BlockMeta' has a mix of DSL and Cardano values, only the DSL values are translated
+-- NOTE: BlockMeta' has a mix of DSL and Cardano values, only the DSL values are translated
 instance DSL.Hash h Addr => Interpret h (BlockMeta' h) where
   type Interpreted (BlockMeta' h) = BlockMeta
 
@@ -551,20 +560,16 @@ instance DSL.Hash h Addr => Interpret h (BlockMeta' h) where
           intAddrMetas addrMetas
             = InDb . Map.fromList <$> mapM intAddrMeta (Map.toList addrMetas)
 
-          -- Interpret only the Addr to Address, there is no need to do anything with AddressMeta
+          -- Interpret only the key, leaving the indexed value AddressMeta unchanged
           intAddrMeta :: (Addr,AddressMeta) -> IntT h e m (Address,AddressMeta)
-          intAddrMeta (addr,addrMeta) = do
-              address <- addrInfoCardano <$> int addr
-              return (address,addrMeta)
+          intAddrMeta (addr,addrMeta) = (,addrMeta) . addrInfoCardano <$> int addr
 
           intTxIds :: Map (h (DSL.Transaction h Addr)) SlotId -> IntT h e m (InDb (Map TxId SlotId))
           intTxIds txIds = InDb . Map.fromList <$> mapM intTxId (Map.toList txIds)
 
-          -- Interpret only the DSL to Cardano TxId, there is no need to do anything with SlotId
+          -- Interpret only the key, leaving the indexed value SlotId unchanged
           intTxId :: (h (DSL.Transaction h Addr),SlotId) -> IntT h e m (TxId, SlotId)
-          intTxId (txId,slotId) = do
-              txId' <- intHash txId
-              return (txId',slotId)
+          intTxId (txId,slotId) = (,slotId) <$> intHash txId
 
 {-------------------------------------------------------------------------------
   Instances that change the state

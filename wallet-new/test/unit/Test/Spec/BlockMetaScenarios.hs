@@ -98,9 +98,9 @@ paymentWithChangeFromP1ToP0 GenesisValues{..} = Transaction {
   where
     fee = overestimate txFee 1 2
 
-slot0, slot1 :: SlotId
-slot0 = SlotId (EpochIndex 0) (UnsafeLocalSlotIndex 1)
-slot1 = SlotId (EpochIndex 0) (UnsafeLocalSlotIndex 2)
+slot1, slot2 :: SlotId
+slot1 = SlotId (EpochIndex 0) (UnsafeLocalSlotIndex 1)
+slot2 = SlotId (EpochIndex 0) (UnsafeLocalSlotIndex 2)
 
 -- | Scenario A
 -- A single pending payment from P0 to P1, with 'change' returned to P0
@@ -149,7 +149,7 @@ blockMetaScenarioB genVals@GenesisValues{..}
 
     --  EXPECTED BlockMeta:
     --    * since the transaction is now confirmed, we expect to see the single transaction
-    _blockMetaSlotId' = Map.singleton (hash t0) slot0
+    _blockMetaSlotId' = Map.singleton (hash t0) slot1
     --    * we expect the address to be recognised as a 'change' address in the metadata
     _blockMetaAddressMeta'
         = Map.singleton p0 (AddressMeta {_addressMetaIsUsed = True, _addressMetaIsChange = True})
@@ -178,7 +178,7 @@ blockMetaScenarioC genVals@GenesisValues{..}
 
     --  EXPECTED BlockMeta:
     --    * we expect to see the 2 confirmed transactions
-    _blockMetaSlotId' = Map.fromList [(hash t0, slot0),(hash t1, slot1)]
+    _blockMetaSlotId' = Map.fromList [(hash t0, slot1),(hash t1, slot2)]
     --    * we expect the address to no longer be recognised as a 'change' address in the metadata
     --      (because a `change` address must occur in exactly one confirmed transaction)
     _blockMetaAddressMeta'
@@ -208,7 +208,7 @@ blockMetaScenarioD genVals@GenesisValues{..}
 
     --  EXPECTED BlockMeta:
     --    * we expect to see only 1 confirmed transaction after the rollback
-    _blockMetaSlotId' = Map.singleton (hash t0) slot0
+    _blockMetaSlotId' = Map.singleton (hash t0) slot1
     --    * we expect the address to again be recognised as a 'change' address in the metadata
     --      (the rollback leads to the `change` address occuring in exactly one confirmed transaction again, as in ScenarioC)
     _blockMetaAddressMeta'
@@ -236,7 +236,7 @@ blockMetaScenarioE genVals@GenesisValues{..}
 
     --  EXPECTED BlockMeta:
     --    * we expect to see the single confirmed transaction
-    _blockMetaSlotId' = Map.singleton (hash t0) slot0
+    _blockMetaSlotId' = Map.singleton (hash t0) slot1
     -- For `t0` the inputs are not all "ours" and hence `isChange` is False
     _blockMetaAddressMeta'
         = Map.singleton p0 (AddressMeta {_addressMetaIsUsed = True, _addressMetaIsChange = False})

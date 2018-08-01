@@ -12,6 +12,7 @@ module Wallet.Inductive.Cardano (
   , equivalentT
   ) where
 
+import qualified Prelude(show)
 import           Universum
 
 import qualified Cardano.Wallet.Kernel as Kernel
@@ -19,7 +20,7 @@ import           Cardano.Wallet.Kernel.Types
 import qualified Cardano.Wallet.Kernel.Wallets as Kernel
 import qualified Data.List as List
 import qualified Data.Map.Strict as Map
-import           Formatting (bprint, build, (%))
+import           Formatting (bprint, build, formatToString, (%))
 import qualified Formatting.Buildable
 
 import           Pos.Core (HasConfiguration)
@@ -331,6 +332,11 @@ data EquivalenceViolationEvidence =
       , notEquivalentTranslated :: Interpreted a
       , notEquivalentKernel     :: Interpreted a
       }
+
+instance Show EquivalenceViolation where
+    show = formatToString build
+
+instance Exception EquivalenceViolation
 
 {-------------------------------------------------------------------------------
   Pretty-printing

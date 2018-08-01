@@ -6,15 +6,11 @@ import           Universum
 
 import qualified Data.Set as Set
 
-import           Formatting (sformat, build, (%))
-
 import qualified Cardano.Wallet.Kernel as Kernel
 import           Cardano.Wallet.Kernel.DB.BlockMeta (BlockMeta)
 import qualified Cardano.Wallet.Kernel.Diffusion as Kernel
 import qualified Cardano.Wallet.Kernel.Keystore as Keystore
 import           Cardano.Wallet.Kernel.MonadDBReadAdaptor (rocksDBNotAvailable)
-
-import           Control.Exception (throw)
 
 import           Pos.Core (Coeff (..), TxSizeLinear (..))
 import           Pos.Core.Chrono
@@ -46,21 +42,17 @@ import qualified Wallet.Rollback.Full as Full
 spec :: Spec
 spec =
     describe "Compare wallet kernel to pure model" $ do
+      describe "Using hand-written inductive wallets, computes the expected block metadata for" $ do
+          it "...blockMetaScenarioA" $ bracketActiveWallet $ checkBlockMeta' (blockMetaScenarioA genesis)
+          it "...blockMetaScenarioB" $ bracketActiveWallet $ checkBlockMeta' (blockMetaScenarioB genesis)
+          it "...blockMetaScenarioC" $ bracketActiveWallet $ checkBlockMeta' (blockMetaScenarioC genesis)
+          it "...blockMetaScenarioD" $ bracketActiveWallet $ checkBlockMeta' (blockMetaScenarioD genesis)
+          it "...blockMetaScenarioE" $ bracketActiveWallet $ checkBlockMeta' (blockMetaScenarioE genesis)
+
       describe "Using hand-written inductive wallets" $ do
         it "computes identical results in presence of dependent pending transactions" $
           bracketActiveWallet $ \activeWallet -> do
             checkEquivalent activeWallet (dependentPending genesis)
-
-        it "computes the expected block metadata for blockMetaScenarioA" $
-          bracketActiveWallet $ checkBlockMeta' (blockMetaScenarioA genesis)
-        it "computes the expected block metadata for blockMetaScenarioB" $
-          bracketActiveWallet $ checkBlockMeta' (blockMetaScenarioB genesis)
-        it "computes the expected block metadata for blockMetaScenarioC" $
-          bracketActiveWallet $ checkBlockMeta' (blockMetaScenarioC genesis)
-        it "computes the expected block metadata for blockMetaScenarioD" $
-          bracketActiveWallet $ checkBlockMeta' (blockMetaScenarioD genesis)
-        it "computes the expected block metadata for blockMetaScenarioE" $
-          bracketActiveWallet $ checkBlockMeta' (blockMetaScenarioE genesis)
 
       it "computes identical results using generated inductive wallets" $
         forAll (genInductiveUsingModel model) $ \ind -> do
@@ -90,11 +82,10 @@ spec =
                     -> Expectation
     checkEquivalent w ind = shouldReturnValidated $ evaluate w ind
 
-    -- | Evaluate the inductive step by step and compare the DSL and Cardano results
+    -- | Evaluate the inductive wallet step by step and compare the DSL and Cardano results
     --   at the end of each step.
-    -- NOTE: This evaluation leaves side effects: it changes the state of the active wallet
-    --       and also updates the inductive context, which we return to enable
-    --       further custom interpretation.
+    -- NOTE: This evaluation changes the state of the wallet and also produces an
+    -- interpretation context, which we return to enable further custom interpretation
     evaluate :: forall h. Hash h Addr
              => Kernel.ActiveWallet
              -> Inductive h Addr
@@ -114,10 +105,8 @@ spec =
     evaluate' activeWallet ind = do
         res <- evaluate activeWallet ind
         case res of
-            Invalid _ e   ->
-               error $ sformat ("Inductive wallet evaluation failed: "%build) e
-            Valid intCtxt' ->
-               return intCtxt'
+            Invalid _ e    -> throwM e
+            Valid intCtxt' -> return intCtxt'
 
     mkWallet :: Hash h Addr => Ours Addr -> Transaction h Addr -> Wallet h Addr
     mkWallet = walletBoot Full.walletEmpty
@@ -130,7 +119,7 @@ spec =
     intBlockMeta intCtxt a = do
         ma' <- catchTranslateErrors $ runIntT' intCtxt $ int a
         case ma' of
-          Left err -> throw err
+          Left err -> liftIO $ throwM err
           Right (a', _ic') -> return a'
 
     checkBlockMeta' :: Hash h Addr
@@ -139,7 +128,7 @@ spec =
                     -> IO ()
     checkBlockMeta' (ind, blockMeta') activeWallet
         = do
-            -- evaluates and verifies the inductive, leaving changes in wallet state and the interpretation context
+            -- the evaluation changes the wallet state; we also capture the interpretation context
             intCtxt <- evaluate' activeWallet ind
 
             -- translate DSL BlockMeta' to Cardano BlockMeta
