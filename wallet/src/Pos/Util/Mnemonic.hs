@@ -88,6 +88,9 @@ data MnemonicErr
     | MnemonicErrInvalidWord Text
     deriving (Show)
 
+fromEntropyError :: EntropyError -> MnemonicErr
+fromEntropyError (InvalidEntropyLength a _) = MnemonicErrInvalidEntropyLength a
+fromEntropyError (InvalidChecksum _ _) = error "TODO: unimplemented"
 
 --
 -- CONSTRUCTORS
@@ -98,14 +101,10 @@ mkEntropy
     :: forall n csz. (ValidEntropySize n, ValidChecksumSize n csz)
     => ByteString
     -> Either MnemonicErr (Entropy n)
-mkEntropy =
-    let
-        n = fromIntegral $ natVal (Proxy @n)
-    in
-        maybe (Left $ MnemonicErrInvalidEntropyLength n) Right . toEntropy @n
+mkEntropy = left fromEntropyError . toEntropy @n
 
 
--- | Generate Entropy of a given size using a random seed.
+-- | Generate Entropy of a given size using a random Seed.
 --
 -- Example:
 --     do
@@ -141,11 +140,7 @@ mkMnemonic wordsm = do
         (\(WordNotFound w) -> MnemonicErrInvalidWord (fromUtf8String w))
         ((mnemonicPhraseToMnemonicSentence Dictionary.english) phrase)
 
-    entropy <- maybe
-        (Left MnemonicErrFailedToCreate)
-        Right
-        (wordsToEntropy sentence :: Maybe (Entropy n))
-
+    entropy <- left fromEntropyError $ wordsToEntropy sentence
     when (isForbiddenMnemonic sentence) $
         Left MnemonicErrForbiddenMnemonic
 
@@ -340,13 +335,10 @@ instance Default (Mnemonic 12) where
                 (error $ show $ UnexpectedMnemonicErr MnemonicErrFailedToCreate)
                 (mnemonicPhrase @12 (toUtf8String <$> wordsm))
 
-            sentence = either
-                (\(WordNotFound w) -> error $ show $ MnemonicErrInvalidWord (fromUtf8String w))
-                id
+            sentence = either (error . show) id
                 ((mnemonicPhraseToMnemonicSentence Dictionary.english) phrase)
 
-            entropy = fromMaybe
-                (error $ show $ UnexpectedMnemonicErr MnemonicErrFailedToCreate)
+            entropy = either (error . show) id
                 (wordsToEntropy @(EntropySize 12) sentence)
         in Mnemonic
             { mnemonicToSentence = sentence

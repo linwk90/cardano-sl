@@ -66,7 +66,7 @@ packages:
 
 - location:
     git: https://github.com/anviking/cardano-crypto # FIXME: Don't use fork
-    commit: c2b47b8dfc678e508b6c79f5a8712e219e083b3b
+    commit: 0f83975cb1cff7da7ed9614b3ebca41fc25783b7
   extra-dep: true
 
 ## Vendored/Forked dependencies
