@@ -44,6 +44,7 @@ import           Data.Acid (Query, Update, makeAcidic)
 import qualified Data.Map.Merge.Strict as Map.Merge
 import qualified Data.Map.Strict as Map
 import           Data.SafeCopy (base, deriveSafeCopy)
+import qualified Data.Set as Set
 import           Formatting (bprint, build, (%))
 import qualified Formatting.Buildable
 
@@ -59,7 +60,7 @@ import           Cardano.Wallet.Kernel.DB.HdWallet
 import qualified Cardano.Wallet.Kernel.DB.HdWallet.Create as HD
 import qualified Cardano.Wallet.Kernel.DB.HdWallet.Delete as HD
 import qualified Cardano.Wallet.Kernel.DB.HdWallet.Update as HD
-import           Cardano.Wallet.Kernel.DB.InDb
+import           Cardano.Wallet.Kernel.DB.InDb (InDb(InDb, _fromDb))
 import           Cardano.Wallet.Kernel.DB.Spec
 import qualified Cardano.Wallet.Kernel.DB.Spec.Update as Spec
 import qualified Cardano.Wallet.Kernel.DB.Spec.Util as Spec
@@ -131,9 +132,9 @@ newPending accountId tx = runUpdate' . zoom dbHdWallets $
 -- is because the submission layer doesn't have the notion of \"which HdWallet
 -- is this transaction associated with?\", but it merely dispatch and cancels
 -- transactions for all the wallets managed by this edge node.
-cancelPending :: Map HdAccountId (InDb (Set Txp.TxId)) -> Update DB ()
+cancelPending :: Map HdAccountId (InDb (Set (InDb Txp.TxId))) -> Update DB ()
 cancelPending cancelled = void . runUpdate' . zoom dbHdWallets $
-    forM_ (Map.toList cancelled) $ \(accountId, InDb txids) ->
+    forM_ (Map.toList cancelled) $ \(accountId, InDb txids) -> do
         -- Here we are deliberately swallowing the possible exception
         -- returned by the wrapped 'zoom' as the only reason why this update
         -- might fail is if, in the meantime, the target account was cancelled,
@@ -141,7 +142,8 @@ cancelPending cancelled = void . runUpdate' . zoom dbHdWallets $
         -- skip cancelling the transactions for the account that has been removed.
         handleError (\(_e :: UnknownHdAccount) -> return ()) $
             zoomHdAccountId identity accountId $ do
-              modify' (over hdAccountCheckpoints (Spec.cancelPending txids))
+              modify' (over hdAccountCheckpoints
+                            (Spec.cancelPending (Set.map _fromDb txids)))
     where
         handleError :: MonadError e m => (e -> m a) -> m a -> m a
         handleError = flip catchError

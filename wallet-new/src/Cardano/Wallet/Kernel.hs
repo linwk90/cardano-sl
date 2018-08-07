@@ -41,6 +41,7 @@ import           System.Wlog (Severity (..))
 import           Data.Acid (AcidState)
 import           Data.Acid.Advanced (query', update')
 import           Data.Acid.Memory (openMemoryState)
+import qualified Data.Set as Set
 
 import           Cardano.Wallet.Kernel.Internal
 
@@ -246,7 +247,8 @@ newPending ActiveWallet{..} accountId tx = do
 
 cancelPending :: PassiveWallet -> Cancelled -> IO ()
 cancelPending passiveWallet cancelled =
-    update' (passiveWallet ^. wallets) $ CancelPending (fmap InDb cancelled)
+    update' (passiveWallet ^. wallets)
+            (CancelPending (fmap (InDb . Set.map InDb) cancelled))
 
 -- | The only effectful query on this 'PassiveWallet'.
 getWalletSnapshot :: PassiveWallet -> IO DB
