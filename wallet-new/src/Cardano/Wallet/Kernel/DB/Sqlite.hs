@@ -496,10 +496,9 @@ getTxMetas conn (Offset offset) (Limit limit) accountFops mbAddress fopTxId fopT
         -- So the marshalling between Haskell types - UTF8 - binary SQlite types shouldn`t
         -- be costly.
         meta <- SQL.runSelectReturningList $ SQL.select $ do
-                meta <- case mbAddress of
+            case mbAddress of
                     Nothing   -> SQL.limit_ limit $ SQL.offset_ offset $ metaQuery
                     Just addr -> SQL.limit_ limit $ SQL.offset_ offset $ metaQueryWithAddr addr
-                pure $ meta
         input <- SQL.runSelectReturningList $ SQL.select $ do
                 input <- SQL.all_ $ _mDbInputs metaDB
                 let TxIdPrimKey txid = _txCoinDistributionTxId $ _getTxInput input
