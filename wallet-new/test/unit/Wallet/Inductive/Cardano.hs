@@ -18,7 +18,6 @@ import           Universum
 import qualified Cardano.Wallet.Kernel as Kernel
 import           Cardano.Wallet.Kernel.Types
 import qualified Cardano.Wallet.Kernel.Wallets as Kernel
-import qualified Data.List as List
 import qualified Data.Map.Strict as Map
 import           Formatting (bprint, build, formatToString, (%))
 import qualified Formatting.Buildable
@@ -227,10 +226,10 @@ equivalentT activeWallet esk = \mkWallet w ->
             -- Here, we safely extract the AccountId.
             pickSingletonAccountId :: [HD.HdAccountId] -> HD.HdAccountId
             pickSingletonAccountId accountIds' =
-                case length accountIds' of
-                    1 -> List.head accountIds'
-                    0 -> error "ERROR: no accountIds generated for the given Utxo"
-                    _ -> error "ERROR: multiple AccountIds, only one expected"
+                case accountIds' of
+                    [accId] -> accId
+                    []      -> error "ERROR: no accountIds generated for the given Utxo"
+                    _       -> error "ERROR: multiple accountIds generated, only one expected"
 
     walletApplyBlockT :: InductiveCtxt h
                       -> HD.HdAccountId

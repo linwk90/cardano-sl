@@ -256,7 +256,6 @@ data Rich = Rich {
 -- (current generation just creates a single address though)
 data Poor = Poor {
       poorKey   :: EncKeyPair
-    , poorAddrs :: [(EncKeyPair, Address)]
     }
   deriving (Show)
 
@@ -325,15 +324,6 @@ initActors CardanoContext{..} = Actors{..}
       where
         poorKey :: EncKeyPair
         poorKey = encKeyPair poorSec
-
-        poorAddrs :: [(EncKeyPair, Address)]
-        poorAddrs = [ case deriveFirstHDAddress
-                             (IsBootstrapEraAddr True)
-                             emptyPassphrase
-                             poorSec of
-                        Nothing          -> error "impossible"
-                        Just (addr, key) -> (encKeyPair key, addr)
-                    ]
 
     mkStake :: SecretKey -> (StakeholderId, Stakeholder)
     mkStake stkSec = (regKpHash stkKey, Stakeholder{..})
@@ -459,20 +449,45 @@ initAddrMap Actors{..} = AddrMap{
             }
         )
 
+    -- | Adds a number of addresses (`numPoorAddrs`) for each Poor actor
     mkPoor :: Int -> Poor -> [(Addr, AddrInfo)]
-    mkPoor actorIx Poor{..} = zipWith poorRawAddr [0..] poorAddrs
-      where
-        poorRawAddr :: Int
-                    -> (EncKeyPair, Address)
-                    -> (Addr, AddrInfo)
-        poorRawAddr addrIx (ekp, addr) = (
-              Addr (IxPoor actorIx) addrIx
-            , AddrInfo {
-                  addrInfoMasterKey = Just poorKey
-                , addrInfoAddrKey   = KeyPairEncrypted ekp
-                , addrInfoCardano   = addr
-                }
-            )
+    mkPoor actorIx Poor{..} =
+        [ poorRawAddr addrIxI (deriveHDAddress' poorSec accId0 addrIxW)
+        | (addrIxI, addrIxW) <- addrIxs
+        ]
+        where
+            -- the first HD account and address
+            accId0  = accountGenesisIndex
+            addrIx0 = wAddressGenesisIndex
+            poorSec = encKpEnc poorKey
+
+            numPoorAddrs = 10 -- TODO @@@
+            addrIxs = map (\i -> (i, addrIx0 + (fromIntegral i)) )
+                          [0 .. numPoorAddrs - 1]
+
+            poorRawAddr :: Int -- ^ AddrIx
+                        -> (EncKeyPair, Address)
+                        -> (Addr, AddrInfo)
+            poorRawAddr addrIx' (ekp, addr) = (
+                  Addr (IxPoor actorIx) addrIx'
+                , AddrInfo {
+                      addrInfoMasterKey = Just poorKey
+                    , addrInfoAddrKey   = KeyPairEncrypted ekp
+                    , addrInfoCardano   = addr
+                    }
+                )
+
+            deriveHDAddress' :: EncryptedSecretKey
+                             -> Word32 -- ^ account index
+                             -> Word32 -- ^ address index
+                             -> (EncKeyPair, Address)
+            deriveHDAddress' esk accIx' addrIx'
+                = case deriveLvl2KeyPair bootstrapEra scp emptyPassphrase esk accIx' addrIx' of
+                    Nothing          -> error "impossible"
+                    Just (addr, key) -> (encKeyPair key, addr)
+                where
+                    bootstrapEra = IsBootstrapEraAddr True
+                    scp          = ShouldCheckPassphrase False
 
     mkAvvm :: Int -> Avvm -> (Addr, AddrInfo)
     mkAvvm actorIx Avvm{..} = (
@@ -580,11 +595,9 @@ instance Buildable Poor where
   build Poor{..} = bprint
       ( "Poor"
       % "{ key:   " % build
-      % ", addrs: " % listJson
       % "}"
       )
       poorKey
-      (map (bprint pairF) poorAddrs)
 
 instance Buildable Stakeholder where
   build Stakeholder{..} = bprint

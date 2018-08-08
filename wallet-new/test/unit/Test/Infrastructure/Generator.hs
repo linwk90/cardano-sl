@@ -12,6 +12,8 @@ module Test.Infrastructure.Generator (
 
 import           Universum
 
+import qualified Data.Map as Map
+
 import qualified Data.Set as Set
 import           Test.QuickCheck
 
@@ -44,7 +46,7 @@ data GeneratorModel h a = GeneratorModel {
     , gmAllAddresses  :: [a]
 
      -- | Which subset of 'gmAllAddresses' can we choose from for @ours@?
-    , gmPotentialOurs :: a -> Bool
+    , gmOurs :: Set a
 
       -- | Maximum number of addresses to use for @ours@
     , gmMaxNumOurs    :: Int
@@ -64,20 +66,20 @@ genChainUsingModel GeneratorModel{..} =
 genInductiveUsingModel :: (Hash h a, Ord a)
                        => GeneratorModel h a -> Gen (Inductive h a)
 genInductiveUsingModel GeneratorModel{..} = do
-    numOurs <- choose (1, min (length potentialOurs) gmMaxNumOurs)
-    addrs'  <- shuffle potentialOurs
-    let ours = Set.fromList (take numOurs addrs')
-    events  <- evalStateT (genWalletEvents (params ours)) initState
+    events <- evalStateT (genWalletEvents (params ours)) initState
     return Inductive {
         inductiveBoot   = gmBoot
       , inductiveOurs   = ours
       , inductiveEvents = events
       }
   where
-    potentialOurs = filter gmPotentialOurs gmAllAddresses
-    params ours   = defEventsParams gmEstimateFee gmAllAddresses ours initUtxo
-    initUtxo      = utxoRestrictToAddr (`elem` gmAllAddresses) $ trUtxo gmBoot
-    initState     = initEventsGlobalState 1
+    initUtxo  = utxoRestrictToAddr (`elem` gmAllAddresses) $ trUtxo gmBoot
+    initState = initEventsGlobalState 1
+
+    numOurs   = min (Set.size gmOurs) gmMaxNumOurs
+    ours      = Set.take numOurs gmOurs
+
+    params ours'  = defEventsParams gmEstimateFee gmAllAddresses ours' initUtxo
 
 {-------------------------------------------------------------------------------
   Simple model
@@ -89,7 +91,7 @@ genInductiveUsingModel GeneratorModel{..} = do
 simpleModel :: GeneratorModel GivenHash Char
 simpleModel = GeneratorModel {
       gmAllAddresses  = addrs
-    , gmPotentialOurs = \_ -> True
+    , gmOurs          = Set.fromList addrs
     , gmEstimateFee   = \_ _ -> 0
     , gmMaxNumOurs    = 3
     , gmBoot          = Transaction {
@@ -119,19 +121,47 @@ simpleModel = GeneratorModel {
 -- actors, large values, etc., and so is a bit difficult to debug when
 -- looking at values manually.
 cardanoModel :: TxSizeLinear
-             -> Transaction GivenHash Addr -> GeneratorModel GivenHash Addr
-cardanoModel linearFeePolicy boot = GeneratorModel {
+             -> Int -- ^^ "our" actor of interest
+             -> Int -- ^^ number of addresses to create for poor actors
+             -> Transaction GivenHash Addr
+             -> GeneratorModel GivenHash Addr
+cardanoModel linearFeePolicy ourActor numPoorAddrs boot =
+    GeneratorModel {
       gmBoot          = boot
-    , gmAllAddresses  = filter (not . isAvvmAddr) $ addrsInBoot boot
-    , gmPotentialOurs = \_ -> True
+    , gmAllAddresses  = richAddrs ++ concat (Map.elems poorAddrs)
+    , gmOurs          = Set.fromList ourAddrs
     , gmEstimateFee   = estimateCardanoFee linearFeePolicy
-    , gmMaxNumOurs    = 5
+    , gmMaxNumOurs    = 10
     }
+    where
+        Just ourAddrs = Map.lookup ourActor poorAddrs
+        (rich, poor) = actorsInBoot boot
 
+        richAddrs :: [Addr]
+        richAddrs = [(Addr (IxRich r) 0) | r <- rich]
+
+        poorAddrs :: Map Int [Addr]
+        poorAddrs = Map.fromListWith (++) $
+                        [ (p, [ (Addr (IxPoor p) i)
+                              | i <- [0 .. numPoorAddrs - 1]
+                              ])
+                        | p <- poor
+                        ]
 
 {-------------------------------------------------------------------------------
   Auxiliary
 -------------------------------------------------------------------------------}
+
+-- | The rich and poor actors in the bootstrap transaction
+actorsInBoot :: Transaction GivenHash Addr -> ([Int], [Int])
+actorsInBoot boot = foldl f ([],[]) (addrsInBoot boot)
+    where
+        f (richIxs, poorIxs) (Addr (IxPoor actorIx) _) =
+            (richIxs, actorIx:poorIxs)
+        f (richIxs, poorIxs) (Addr (IxRich actorIx) _) =
+            (actorIx:richIxs, poorIxs)
+        f acc (Addr _ _) =
+            acc
 
 addrsInBoot :: Transaction GivenHash a -> [a]
 addrsInBoot = map outAddr . trOuts

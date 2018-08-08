@@ -557,8 +557,7 @@ instance DSL.Hash h Addr => Interpret h (BlockMeta' h) where
       return $ BlockMeta {..}
       where
           intAddrMetas :: Map Addr AddressMeta -> IntT h e m (InDb (Map Address AddressMeta))
-          intAddrMetas addrMetas
-            = InDb . Map.fromList <$> mapM intAddrMeta (Map.toList addrMetas)
+          intAddrMetas addrMetas= InDb . Map.fromList <$> mapM intAddrMeta (Map.toList addrMetas)
 
           -- Interpret only the key, leaving the indexed value AddressMeta unchanged
           intAddrMeta :: (Addr,AddressMeta) -> IntT h e m (Address,AddressMeta)

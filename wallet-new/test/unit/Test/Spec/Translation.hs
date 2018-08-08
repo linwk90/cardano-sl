@@ -62,7 +62,7 @@ spec = do
     describe "Translation QuickCheck tests" $ do
       prop "can translate randomly generated chains" $
         forAll
-          (intAndVerifyGen (genChainUsingModel . cardanoModel linearFeePolicy))
+          (intAndVerifyGen (genChainUsingModel . cardanoModel linearFeePolicy 0 10)) -- TODO @@@
           expectValid
 
   where

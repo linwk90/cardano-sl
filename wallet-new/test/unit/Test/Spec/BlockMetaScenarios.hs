@@ -62,11 +62,13 @@ paymentWithChangeFromP0ToP1 GenesisValues{..} = Transaction {
     fee = overestimate txFee 1 2
 
 -- | Two payments from P0 to P1 with change returned to P0.
+--   (t0 uses change address p0 and t1 uses p0b)
 --   The second payment spends the change of the first payment.
 repeatPaymentWithChangeFromP0ToP1 :: forall h. Hash h Addr
                                   => GenesisValues h Addr
+                                  -> Addr
                                   -> (Transaction h Addr, Transaction h Addr)
-repeatPaymentWithChangeFromP0ToP1 genVals@GenesisValues{..} = (t0,t1)
+repeatPaymentWithChangeFromP0ToP1 genVals@GenesisValues{..} changeAddr = (t0,t1)
   where
     fee = overestimate txFee 1 2
 
@@ -75,7 +77,7 @@ repeatPaymentWithChangeFromP0ToP1 genVals@GenesisValues{..} = (t0,t1)
             trFresh = 0
           , trIns   = Set.fromList [ Input (hash t0) 1 ]
           , trOuts  = [ Output p1 1000
-                      , Output p0 (initBalP0 - 1 * (1000 + fee)) -- change
+                      , Output changeAddr (initBalP0 - 1 * (1000 + fee)) -- change
                       ]
           , trFee   = fee
           , trHash  = 2
@@ -113,7 +115,7 @@ blockMetaScenarioA genVals@GenesisValues{..}
     t0 = paymentWithChangeFromP0ToP1 genVals
     ind = Inductive {
           inductiveBoot   = boot
-        , inductiveOurs   = Set.singleton p0 -- where we define the owner of the wallet: P0
+        , inductiveOurs   = Set.singleton p0 -- define the owner of the wallet: Poor actor 0
         , inductiveEvents = OldestFirst [
               NewPending t0
             ]
@@ -122,7 +124,7 @@ blockMetaScenarioA genVals@GenesisValues{..}
     --  EXPECTED BlockMeta:
     --    * since the transaction is not confirmed, we expect no confirmed transactions
     _blockMetaSlotId' = Map.empty
-    --    * we expect no addresss metadata for the pending 'change' address
+    --    * we expect no address metadata for the pending 'change' address
     _blockMetaAddressMeta' = Map.empty
 
 -- | Scenario B
@@ -140,7 +142,7 @@ blockMetaScenarioB genVals@GenesisValues{..}
     t0 = paymentWithChangeFromP0ToP1 genVals
     ind = Inductive {
           inductiveBoot   = boot
-        , inductiveOurs   = Set.singleton p0 -- where we define the owner of the wallet
+        , inductiveOurs   = Set.singleton p0 -- define the owner of the wallet: Poor actor 0
         , inductiveEvents = OldestFirst [
               NewPending t0
             , ApplyBlock $ OldestFirst [t0] -- confirms t0 and updates block metadata
@@ -165,10 +167,10 @@ blockMetaScenarioC :: forall h. Hash h Addr
 blockMetaScenarioC genVals@GenesisValues{..}
     = (ind, BlockMeta'{..})
   where
-    (t0,t1) = repeatPaymentWithChangeFromP0ToP1 genVals
+    (t0,t1) = repeatPaymentWithChangeFromP0ToP1 genVals p0b
     ind = Inductive {
           inductiveBoot   = boot
-        , inductiveOurs   = Set.singleton p0 -- where we define the owner of the wallet
+        , inductiveOurs   = Set.fromList [p0,p0b] -- define the owner of the wallet: Poor actor 0
         , inductiveEvents = OldestFirst [
               NewPending t0
             , ApplyBlock $ OldestFirst [t0] -- confirms t0 and updates block metadata
@@ -182,7 +184,8 @@ blockMetaScenarioC genVals@GenesisValues{..}
     --    * we expect the address to no longer be recognised as a 'change' address in the metadata
     --      (because a `change` address must occur in exactly one confirmed transaction)
     _blockMetaAddressMeta'
-        = Map.singleton p0 (AddressMeta {_addressMetaIsUsed = True, _addressMetaIsChange = False})
+        = Map.fromList [  (p0,  (AddressMeta {_addressMetaIsUsed = True, _addressMetaIsChange = True}))
+                        , (p0b, (AddressMeta {_addressMetaIsUsed = True, _addressMetaIsChange = True}))]
 
 -- | Scenario D
 -- ScenarioC + Rollback
@@ -194,10 +197,10 @@ blockMetaScenarioD :: forall h. Hash h Addr
 blockMetaScenarioD genVals@GenesisValues{..}
     = (ind, BlockMeta'{..})
   where
-    (t0,t1) = repeatPaymentWithChangeFromP0ToP1 genVals
+    (t0,t1) = repeatPaymentWithChangeFromP0ToP1 genVals p0b
     ind = Inductive {
           inductiveBoot   = boot
-        , inductiveOurs   = Set.singleton p0 -- where we define the owner of the wallet
+        , inductiveOurs   = Set.fromList [p0,p0b] -- define the owner of the wallet: Poor actor 0
         , inductiveEvents = OldestFirst [
               NewPending t0
             , ApplyBlock $ OldestFirst [t0] -- confirms t0 and updates block metadata
@@ -228,7 +231,7 @@ blockMetaScenarioE genVals@GenesisValues{..}
     t0 = paymentWithChangeFromP1ToP0 genVals
     ind = Inductive {
           inductiveBoot   = boot
-        , inductiveOurs   = Set.singleton p0 -- where we define the owner of the wallet
+        , inductiveOurs   = Set.singleton p0 -- define the owner of the wallet: Poor actor 0
         , inductiveEvents = OldestFirst [
             ApplyBlock $ OldestFirst [t0] -- confirms t0 and updates block metadata
             ]

@@ -36,7 +36,7 @@ spec = do
       it "Using simple model" $
         forAll (genInductiveUsingModel simpleModel) $ testPureWalletWith
       it "Using Cardano model" $
-        forAll (genInductiveUsingModel (cardanoModel linearFeePolicy boot)) $ testPureWalletWith
+        forAll (genInductiveUsingModel (cardanoModel linearFeePolicy 0 10 boot)) $ testPureWalletWith
   where
     transCtxt = runTranslateNoErrors ask
     boot      = bootstrapTransaction transCtxt
