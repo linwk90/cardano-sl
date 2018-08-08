@@ -22,7 +22,6 @@ import           Pos.Crypto (hash)
 
 import           Cardano.Wallet.API.Request
 import           Cardano.Wallet.API.Response
-import           Cardano.Wallet.API.V1.Errors (WalletError (..))
 import qualified Cardano.Wallet.API.V1.Transactions as Transactions
 import           Cardano.Wallet.API.V1.Types
 import           Cardano.Wallet.Kernel.CoinSelection.FromGeneric
@@ -112,38 +111,32 @@ estimateFees aw payment@Payment{..} = do
          Right fee -> return $ single (EstimatedFees (V1 fee))
 
 redeemAda :: ActiveWalletLayer IO
-          -> Maybe WalletId
-          -> Maybe AccountIndex
+          -> WalletId
+          -> AccountIndex
           -> Redemption
           -> Handler (WalletResponse Transaction)
-redeemAda layer mWId mAccIx redemption = do
-    case (mWId, mAccIx) of
-      (Just wId, Just accIx) -> do
-        res <- liftIO $ WalletLayer.redeemAda layer wId accIx redemption
-        case res of
-             Left e -> throwM e
-             Right tx -> do
-                 -- TODO: This is a straight copy and paste from 'newTransaction' in
-                 -- "Cardano.Wallet.API.V1.Handlers.Transactions". Once [CBR-239]
-                 -- is fixed, we should fix both instances.
-                 now <- liftIO getCurrentTimestamp
-                 -- NOTE(adn) As part of [CBR-239], we could simply fetch the
-                 -- entire 'Transaction' as part of the TxMeta.
-                 return $ single Transaction {
-                     txId            = V1 (hash tx)
-                   , txConfirmations = 0
-                   , txAmount        = V1 (paymentAmount $ _txOutputs tx)
-                   , txInputs        = error "TODO, see [CBR-324]"
-                   , txOutputs       = fmap outputsToDistribution (_txOutputs tx)
-                   , txType          = error "TODO, see [CBR-324]"
-                   , txDirection     = OutgoingTransaction
-                   , txCreationTime  = V1 now
-                   , txStatus        = Creating
-                   }
-      (Nothing, _) ->
-         throwM . MissingRequiredParams $ pure ("wallet_id", "WalletId")
-      (_, Nothing) ->
-         throwM . MissingRequiredParams $ pure ("account_index", "AccountIndex")
+redeemAda layer wId accIx redemption = do
+    res <- liftIO $ WalletLayer.redeemAda layer wId accIx redemption
+    case res of
+         Left e -> throwM e
+         Right tx -> do
+             -- TODO: This is a straight copy and paste from 'newTransaction' in
+             -- "Cardano.Wallet.API.V1.Handlers.Transactions". Once [CBR-239]
+             -- is fixed, we should fix both instances.
+             now <- liftIO getCurrentTimestamp
+             -- NOTE(adn) As part of [CBR-239], we could simply fetch the
+             -- entire 'Transaction' as part of the TxMeta.
+             return $ single Transaction {
+                 txId            = V1 (hash tx)
+               , txConfirmations = 0
+               , txAmount        = V1 (paymentAmount $ _txOutputs tx)
+               , txInputs        = error "TODO, see [CBR-324]"
+               , txOutputs       = fmap outputsToDistribution (_txOutputs tx)
+               , txType          = error "TODO, see [CBR-324]"
+               , txDirection     = OutgoingTransaction
+               , txCreationTime  = V1 now
+               , txStatus        = Creating
+               }
   where
     outputsToDistribution :: TxOut -> PaymentDistribution
     outputsToDistribution (TxOut addr amount) = PaymentDistribution (V1 addr) (V1 amount)

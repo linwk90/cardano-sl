@@ -114,10 +114,7 @@ data WalletClient m
     , getTransactionFee
          :: Payment -> Resp m EstimatedFees
     , redeemAda
-         :: Maybe WalletId
-         -> Maybe AccountIndex
-         -> Redemption
-         -> Resp m Transaction
+         :: WalletId -> AccountIndex -> Redemption -> Resp m Transaction
     -- settings
     , getNodeSettings
          :: Resp m NodeSettings

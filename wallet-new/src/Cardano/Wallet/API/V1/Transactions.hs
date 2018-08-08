@@ -31,8 +31,8 @@ type API = Tags '["Transactions"] :>
                         :> Post '[ValidJSON] (WalletResponse EstimatedFees)
     :<|> "transactions" :> "certificates"
                         :> Summary "Redeem a certificate"
-                        :> QueryParam "wallet_id" WalletId
-                        :> QueryParam "account_index" AccountIndex
+                        :> CaptureWalletId
+                        :> CaptureAccountId
                         :> ReqBody '[ValidJSON] Redemption
                         :> Post '[ValidJSON] (WalletResponse Transaction)
     )

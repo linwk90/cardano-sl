@@ -141,33 +141,27 @@ redeemAda
     => ProtocolMagic
     -> TxpConfiguration
     -> (TxAux -> MonadV1 Bool)
-    -> Maybe WalletId
-    -> Maybe AccountIndex
+    -> WalletId
+    -> AccountIndex
     -> Redemption
     -> MonadV1 (WalletResponse Transaction)
-redeemAda pm txpConfig submitTx mWalletId mAccountIndex r = do
-    case (mWalletId, mAccountIndex) of
-      (Just walletId, Just accountIndex) -> do
-        let ShieldedRedemptionCode seed = redemptionRedemptionCode r
-            V1 spendingPassword = redemptionSpendingPassword r
-        accountId <- migrate (walletId, accountIndex)
-        let caccountId = V0.encodeCType accountId
-        fmap single . migrate =<< case redemptionMnemonic r of
-            Just (RedemptionMnemonic mnemonic) -> do
-                let phrase = V0.CBackupPhrase mnemonic
-                let cpaperRedeem = V0.CPaperVendWalletRedeem
-                        { V0.pvWalletId = caccountId
-                        , V0.pvSeed = seed
-                        , V0.pvBackupPhrase = phrase
-                        }
-                V0.redeemAdaPaperVend pm txpConfig submitTx spendingPassword cpaperRedeem
-            Nothing -> do
-                let cwalletRedeem = V0.CWalletRedeem
-                        { V0.crWalletId = caccountId
-                        , V0.crSeed = seed
-                        }
-                V0.redeemAda pm txpConfig submitTx spendingPassword cwalletRedeem
-      (Nothing, _) ->
-         throwM . MissingRequiredParams $ pure ("wallet_id", "WalletId")
-      (_, Nothing) ->
-         throwM . MissingRequiredParams $ pure ("account_index", "AccountIndex")
+redeemAda pm txpConfig submitTx walletId accountIndex r = do
+    let ShieldedRedemptionCode seed = redemptionRedemptionCode r
+        V1 spendingPassword = redemptionSpendingPassword r
+    accountId <- migrate (walletId, accountIndex)
+    let caccountId = V0.encodeCType accountId
+    fmap single . migrate =<< case redemptionMnemonic r of
+        Just (RedemptionMnemonic mnemonic) -> do
+            let phrase = V0.CBackupPhrase mnemonic
+            let cpaperRedeem = V0.CPaperVendWalletRedeem
+                    { V0.pvWalletId = caccountId
+                    , V0.pvSeed = seed
+                    , V0.pvBackupPhrase = phrase
+                    }
+            V0.redeemAdaPaperVend pm txpConfig submitTx spendingPassword cpaperRedeem
+        Nothing -> do
+            let cwalletRedeem = V0.CWalletRedeem
+                    { V0.crWalletId = caccountId
+                    , V0.crSeed = seed
+                    }
+            V0.redeemAda pm txpConfig submitTx spendingPassword cwalletRedeem
