@@ -19,6 +19,7 @@ import qualified Test.Spec.Accounts
 import qualified Test.Spec.CoinSelection
 import qualified Test.Spec.CreateAddress
 import qualified Test.Spec.CreateWallet
+import qualified Test.Spec.GetTransactions
 import qualified Test.Spec.Kernel
 import qualified Test.Spec.Keystore
 import qualified Test.Spec.Models
@@ -66,12 +67,13 @@ _showContext = do
 
 tests :: Spec
 tests = describe "Wallet unit tests" $ do
+    Test.Spec.GetTransactions.spec
+    txMetaStorageSpecs
     Test.Spec.Translation.spec
     Test.Spec.Models.spec
     Test.Spec.Kernel.spec
     Test.Spec.WalletWorker.spec
     Test.Spec.Submission.spec
-    txMetaStorageSpecs
     Test.Spec.CoinSelection.spec
     Test.Spec.Keystore.spec
     Test.Spec.CreateAddress.spec

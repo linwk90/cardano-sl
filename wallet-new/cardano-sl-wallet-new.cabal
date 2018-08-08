@@ -399,6 +399,7 @@ test-suite wallet-unit-tests
                       Test.Spec.CreateAddress
                       Test.Spec.CreateWallet
                       Test.Spec.Fixture
+                      Test.Spec.GetTransactions
                       Test.Spec.Kernel
                       Test.Spec.Keystore
                       Test.Spec.Models

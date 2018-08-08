@@ -1,7 +1,8 @@
 {-# LANGUAGE RankNTypes #-}
 module TxMetaStorageSpecs (
-    txMetaStorageSpecs,
-    genMeta
+      txMetaStorageSpecs
+    , genMeta
+    , Isomorphic (..)
     ) where
 
 import           Universum
