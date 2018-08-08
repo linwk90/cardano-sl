@@ -14,13 +14,6 @@ import           Servant
 
 import           Data.Coerce (coerce)
 
-import           Cardano.Wallet.Kernel.CoinSelection.FromGeneric
-                     (ExpenseRegulation (..), InputGrouping (..))
-import           Cardano.Wallet.Kernel.Util.Core (getCurrentTimestamp,
-                     paymentAmount)
-import qualified Cardano.Wallet.WalletLayer as WalletLayer
-import           Cardano.Wallet.WalletLayer.Types (ActiveWalletLayer)
-
 import           Pos.Client.Txp.Util (InputSelectionPolicy (..),
                      defaultInputSelectionPolicy)
 import           Pos.Core (Address)
@@ -29,14 +22,21 @@ import           Pos.Crypto (hash)
 
 import           Cardano.Wallet.API.Request
 import           Cardano.Wallet.API.Response
+import           Cardano.Wallet.API.V1.Errors (WalletError (..))
 import qualified Cardano.Wallet.API.V1.Transactions as Transactions
 import           Cardano.Wallet.API.V1.Types
+import           Cardano.Wallet.Kernel.CoinSelection.FromGeneric
+                     (ExpenseRegulation (..), InputGrouping (..))
+import           Cardano.Wallet.Kernel.Util.Core (getCurrentTimestamp,
+                     paymentAmount)
+import qualified Cardano.Wallet.WalletLayer as WalletLayer
+import           Cardano.Wallet.WalletLayer.Types (ActiveWalletLayer)
 
 handlers :: ActiveWalletLayer IO -> ServerT Transactions.API Handler
 handlers aw = newTransaction aw
          :<|> getTransactionsHistory
          :<|> estimateFees aw
-
+         :<|> redeemAda aw
 
 -- Matches the input InputGroupingPolicy with the Kernel's 'InputGrouping'
 toInputGrouping :: Maybe (V1 InputSelectionPolicy) -> InputGrouping
@@ -65,8 +65,10 @@ newTransaction aw payment@Payment{..} = do
          Left err -> throwM err
          Right tx -> do
              now <- liftIO getCurrentTimestamp
-             -- NOTE(adn) As part of [CBR-329], we could simply fetch the
+             -- NOTE(adn) As part of [CBR-239], we could simply fetch the
              -- entire 'Transaction' as part of the TxMeta.
+             -- TODO: Once we fix this here, we should also change it in
+             -- 'redeemAda' in "Cardano.Wallet.API.V1.Handlers.Accounts".
              return $ single Transaction {
                                txId            = V1 (hash tx)
                              , txConfirmations = 0
@@ -108,3 +110,40 @@ estimateFees aw payment@Payment{..} = do
     case res of
          Left err  -> throwM err
          Right fee -> return $ single (EstimatedFees (V1 fee))
+
+redeemAda :: ActiveWalletLayer IO
+          -> Maybe WalletId
+          -> Maybe AccountIndex
+          -> Redemption
+          -> Handler (WalletResponse Transaction)
+redeemAda layer mWId mAccIx redemption = do
+    case (mWId, mAccIx) of
+      (Just wId, Just accIx) -> do
+        res <- liftIO $ WalletLayer.redeemAda layer wId accIx redemption
+        case res of
+             Left e -> throwM e
+             Right tx -> do
+                 -- TODO: This is a straight copy and paste from 'newTransaction' in
+                 -- "Cardano.Wallet.API.V1.Handlers.Transactions". Once [CBR-239]
+                 -- is fixed, we should fix both instances.
+                 now <- liftIO getCurrentTimestamp
+                 -- NOTE(adn) As part of [CBR-239], we could simply fetch the
+                 -- entire 'Transaction' as part of the TxMeta.
+                 return $ single Transaction {
+                     txId            = V1 (hash tx)
+                   , txConfirmations = 0
+                   , txAmount        = V1 (paymentAmount $ _txOutputs tx)
+                   , txInputs        = error "TODO, see [CBR-324]"
+                   , txOutputs       = fmap outputsToDistribution (_txOutputs tx)
+                   , txType          = error "TODO, see [CBR-324]"
+                   , txDirection     = OutgoingTransaction
+                   , txCreationTime  = V1 now
+                   , txStatus        = Creating
+                   }
+      (Nothing, _) ->
+         throwM . MissingRequiredParams $ pure ("wallet_id", "WalletId")
+      (_, Nothing) ->
+         throwM . MissingRequiredParams $ pure ("account_index", "AccountIndex")
+  where
+    outputsToDistribution :: TxOut -> PaymentDistribution
+    outputsToDistribution (TxOut addr amount) = PaymentDistribution (V1 addr) (V1 amount)

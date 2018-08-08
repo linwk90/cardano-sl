@@ -99,8 +99,6 @@ data WalletClient m
         :: WalletId -> New Account -> Resp m Account
     , updateAccount
          :: WalletId -> AccountIndex -> Update Account -> Resp m Account
-    , redeemAda
-        :: WalletId -> AccountIndex -> Redemption -> Resp m Transaction
     -- transactions endpoints
     , postTransaction
          :: Payment -> Resp m Transaction
@@ -115,6 +113,11 @@ data WalletClient m
          -> Resp m [Transaction]
     , getTransactionFee
          :: Payment -> Resp m EstimatedFees
+    , redeemAda
+         :: Maybe WalletId
+         -> Maybe AccountIndex
+         -> Redemption
+         -> Resp m Transaction
     -- settings
     , getNodeSettings
          :: Resp m NodeSettings
@@ -265,4 +268,3 @@ instance Exception ClientError where
     toException (ClientWalletError  e) = toException e
     toException (ClientHttpError    e) = toException e
     toException (UnknownClientError e) = toException e
-

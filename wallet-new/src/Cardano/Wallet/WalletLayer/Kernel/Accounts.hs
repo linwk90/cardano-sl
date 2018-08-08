@@ -13,10 +13,15 @@ import           Data.Coerce (coerce)
 import           Data.Time.Units (Second)
 import           Formatting (build, sformat)
 
+import           Pos.Core (decodeTextAddress)
+import qualified Pos.Core as Core
+import           Pos.Crypto.Signing
+
+import           Cardano.Wallet.API.V1.Types (V1 (..))
+import qualified Cardano.Wallet.API.V1.Types as V1
 import qualified Cardano.Wallet.Kernel as Kernel
 import qualified Cardano.Wallet.Kernel.Accounts as Kernel
 import qualified Cardano.Wallet.Kernel.Addresses as Kernel
-
 import           Cardano.Wallet.Kernel.DB.BlockMeta (addressMetaIsChange,
                      addressMetaIsUsed)
 import qualified Cardano.Wallet.Kernel.DB.HdWallet as HD
@@ -31,14 +36,6 @@ import           Cardano.Wallet.WalletLayer.ExecutionTimeLimit
 import           Cardano.Wallet.WalletLayer.Types (CreateAccountError (..),
                      DeleteAccountError (..), GetAccountError (..),
                      GetAccountsError (..), UpdateAccountError (..))
-
-import           Pos.Core (decodeTextAddress)
-import qualified Pos.Core as Core
-
-import           Cardano.Wallet.API.V1.Types (V1 (..))
-import qualified Cardano.Wallet.API.V1.Types as V1
-import           Pos.Crypto.Signing
-
 
 createAccount :: MonadIO m
               => Kernel.PassiveWallet
@@ -86,10 +83,10 @@ createAccount wallet (V1.WalletId wId) (V1.NewAccount mbSpendingPassword account
 
 
 -- | Retrieves a full set of accounts.
-getAccounts :: Kernel.DB
-            -> V1.WalletId
+getAccounts :: V1.WalletId
+            -> Kernel.DB
             -> Either GetAccountsError (IxSet V1.Account)
-getAccounts snapshot (V1.WalletId wId) = do
+getAccounts (V1.WalletId wId) snapshot = do
     case decodeTextAddress wId of
          Left _ ->
              Left (GetAccountsWalletIdDecodingFailed wId)
@@ -120,11 +117,11 @@ getAccounts snapshot (V1.WalletId wId) = do
                                            . IxSet.toList $ accs
 
 -- | Retrieves a single account.
-getAccount :: Kernel.DB
-           -> V1.WalletId
+getAccount :: V1.WalletId
            -> V1.AccountIndex
+           -> Kernel.DB
            -> Either GetAccountError V1.Account
-getAccount snapshot (V1.WalletId wId) accountIndex = do
+getAccount (V1.WalletId wId) accountIndex snapshot = do
     case decodeTextAddress wId of
          Left _ -> Left (GetAccountWalletIdDecodingFailed wId)
          Right rootAddr -> do

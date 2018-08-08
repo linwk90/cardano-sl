@@ -28,6 +28,7 @@ module Cardano.Wallet.WalletLayer.Types
     , DeleteWalletError(..)
     , NewPaymentError(..)
     , EstimateFeesError(..)
+    , RedeemAdaError(..)
     , CreateAddressError(..)
     , CreateAccountError(..)
     , GetAccountError(..)
@@ -36,32 +37,13 @@ module Cardano.Wallet.WalletLayer.Types
     , UpdateAccountError(..)
     ) where
 
-import qualified Prelude
 import           Universum
 
 import           Control.Lens (makeLenses)
-
 import           Formatting (bprint, build, formatToString, (%))
 import qualified Formatting.Buildable
-
-import           Cardano.Wallet.API.V1.Types (Account, AccountIndex,
-                     AccountUpdate, Address, NewAccount, NewAddress, NewWallet,
-                     PasswordUpdate, Payment, V1 (..), Wallet, WalletId,
-                     WalletUpdate)
-
-import qualified Cardano.Wallet.Kernel.Accounts as Kernel
-import qualified Cardano.Wallet.Kernel.Addresses as Kernel
-import qualified Cardano.Wallet.Kernel.DB.HdWallet as Kernel
-import           Cardano.Wallet.Kernel.DB.Util.IxSet (IxSet)
-import qualified Cardano.Wallet.Kernel.Transactions as Kernel
-import qualified Cardano.Wallet.Kernel.Wallets as Kernel
-import           Cardano.Wallet.WalletLayer.ExecutionTimeLimit
-                     (TimeExecutionLimit)
-
+import qualified Prelude
 import           Test.QuickCheck (Arbitrary (..), oneof)
-
-import           Cardano.Wallet.Kernel.CoinSelection.FromGeneric
-                     (ExpenseRegulation, InputGrouping)
 
 import           Pos.Chain.Block (Blund)
 import           Pos.Core (Coin)
@@ -69,6 +51,20 @@ import           Pos.Core.Chrono (NE, NewestFirst (..), OldestFirst (..))
 import           Pos.Core.Txp (Tx)
 import           Pos.Crypto (PassPhrase)
 
+import           Cardano.Wallet.API.V1.Types (Account, AccountIndex,
+                     AccountUpdate, Address, NewAccount, NewAddress, NewWallet,
+                     PasswordUpdate, Payment, Redemption, V1 (..), Wallet,
+                     WalletId, WalletUpdate)
+import qualified Cardano.Wallet.Kernel.Accounts as Kernel
+import qualified Cardano.Wallet.Kernel.Addresses as Kernel
+import           Cardano.Wallet.Kernel.CoinSelection.FromGeneric
+                     (ExpenseRegulation, InputGrouping)
+import qualified Cardano.Wallet.Kernel.DB.HdWallet as Kernel
+import           Cardano.Wallet.Kernel.DB.Util.IxSet (IxSet)
+import qualified Cardano.Wallet.Kernel.Transactions as Kernel
+import qualified Cardano.Wallet.Kernel.Wallets as Kernel
+import           Cardano.Wallet.WalletLayer.ExecutionTimeLimit
+                     (TimeExecutionLimit)
 
 ------------------------------------------------------------
 -- Errors when manipulating wallets
@@ -456,6 +452,7 @@ data ActiveWalletLayer m = ActiveWalletLayer {
           -> Payment
           -- ^ The payment we need to perform.
           -> m (Either NewPaymentError Tx)
+
       -- | Estimates the fees for a payment.
     , estimateFees   :: PassPhrase
                      -- ^ The \"spending password\" to decrypt the 'EncryptedSecretKey'.
@@ -466,6 +463,15 @@ data ActiveWalletLayer m = ActiveWalletLayer {
                      -> Payment
                      -- ^ The payment we need to perform.
                      -> m (Either EstimateFeesError Coin)
+
+      -- | Redeem ada
+    , redeemAda :: WalletId
+                -- ^ Wallet to redeem to
+                -> AccountIndex
+                -- ^ Account index into specified wallet
+                -> Redemption
+                -- ^ Redemption specification
+                -> m (Either RedeemAdaError Tx)
     }
 
 ------------------------------------------------------------
@@ -508,3 +514,14 @@ instance Arbitrary EstimateFeesError where
     arbitrary = oneof [ EstimateFeesError <$> arbitrary
                       , EstimateFeesTimeLimitReached <$> arbitrary
                       ]
+
+-- | TODO: Will need to be extended
+data RedeemAdaError = RedeemAdaError
+
+instance Show RedeemAdaError where
+    show = formatToString build
+
+instance Exception RedeemAdaError
+
+instance Buildable RedeemAdaError where
+    build RedeemAdaError = "RedeemAdaError"

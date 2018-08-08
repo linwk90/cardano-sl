@@ -76,6 +76,7 @@ bracketActiveWallet walletPassiveLayer _walletDiffusion =
           walletPassiveLayer = walletPassiveLayer
         , pay          = \_ _ _ -> error "unimplemented"
         , estimateFees = \_ _ _ -> error "unimplemented"
+        , redeemAda    = \_ _ _ -> error "unimplemented"
         }
 
 

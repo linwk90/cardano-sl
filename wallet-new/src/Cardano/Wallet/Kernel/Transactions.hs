@@ -214,6 +214,8 @@ newTransaction ActiveWallet{..} spendingPassword options accountId payees = do
                  Right addr -> pure addr
                  Left err   -> throwM err
 
+
+
 -- | Special monad used to process the payments, which randomness is derived
 -- from a fixed seed obtained from hashing the payees. This guarantees that
 -- when we estimate the fees and later create a transaction, the coin selection

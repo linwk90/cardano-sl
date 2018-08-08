@@ -31,10 +31,4 @@ type API
           :> Summary "Update an Account for the given Wallet."
           :> ReqBody '[ValidJSON] (Update Account)
           :> Put '[ValidJSON] (WalletResponse Account)
-    :<|> "wallets" :> CaptureWalletId :> "accounts"
-          :> CaptureAccountId
-          :> Summary "Redeem a certificate"
-          :> "certificates"
-          :> ReqBody '[ValidJSON] Redemption
-          :> Post '[ValidJSON] (WalletResponse Transaction)
     )

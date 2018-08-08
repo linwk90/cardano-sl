@@ -7,22 +7,18 @@ import           Universum
 import           Data.Coerce (coerce)
 import           Data.Time.Units (Second)
 
+import           Pos.Core (Address, decodeTextAddress)
 
+import           Cardano.Wallet.API.V1.Types (V1 (..))
+import qualified Cardano.Wallet.API.V1.Types as V1
 import qualified Cardano.Wallet.Kernel as Kernel
 import qualified Cardano.Wallet.Kernel.Addresses as Kernel
-
 import qualified Cardano.Wallet.Kernel.DB.HdWallet as HD
 import           Cardano.Wallet.Kernel.DB.InDb (InDb (..))
 import           Cardano.Wallet.Kernel.Types (AccountId (..))
 import           Cardano.Wallet.WalletLayer.ExecutionTimeLimit
                      (limitExecutionTimeTo)
 import           Cardano.Wallet.WalletLayer.Types (CreateAddressError (..))
-
-import           Pos.Core (Address, decodeTextAddress)
-
-import qualified Cardano.Wallet.API.V1.Types as V1
-
-import           Cardano.Wallet.API.V1.Types (V1 (..))
 
 createAddress :: MonadIO m
               => Kernel.PassiveWallet

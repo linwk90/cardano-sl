@@ -141,10 +141,10 @@ deleteWallet wallet (V1.WalletId wId) =
                 Right () -> return $ Right ()
 
 -- | Gets a specific wallet.
-getWallet :: Kernel.DB
-          -> V1.WalletId
+getWallet :: V1.WalletId
+          -> Kernel.DB
           -> Either GetWalletError V1.Wallet
-getWallet db (V1.WalletId wId) =
+getWallet (V1.WalletId wId) db =
     case decodeTextAddress wId of
         Left _ -> Left (GetWalletWalletIdDecodingFailed wId)
         Right rootAddr -> do
